@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-library
+  namespace: no-library
+  labels:
+    app.kubernetes.io/name: deployment
+    app.kubernetes.io/instance: no-library
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/created-by: no-library
+    app.kubernetes.io/part-of: no-library
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: no-library
+  template:
+    metadata:
+      name: no-library
+      labels:
+        app.kubernetes.io/instance: no-library
+    spec:
+      containers:
+        - name: manager
+          image: "${IMAGE}"
