@@ -1,13 +1,15 @@
 timestamp := `date +%s`
 
 img-build:
-    docker build --tag 'no-library:{{timestamp}}' .
+    podman build --tag 'no-library:{{timestamp}}' .
+    mkdir -p target
+    podman save -o target/no-library.tar 'no-library:{{timestamp}}'
 
 kind-load: img-build
-    kind load docker-image 'no-library:{{timestamp}}'
+    kind load image-archive target/no-library.tar
 
 k8s-apply: kind-load
-    kustomize build config | IMAGE="no-library:{{timestamp}}" envsubst | kubectl apply -f -
+    kustomize build config | IMAGE="localhost/no-library:{{timestamp}}" envsubst | kubectl apply -f -
 
 k8s-delete:
     kustomize build config | kubectl delete -f -
