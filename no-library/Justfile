@@ -13,3 +13,6 @@ k8s-apply: kind-load
 
 k8s-delete:
     kustomize build config | kubectl delete -f -
+
+fmt:
+    cargo fmt
