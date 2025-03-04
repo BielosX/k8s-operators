@@ -1,0 +1,10 @@
+apiVersion: stable.no-library.com/v1
+kind: ExposedApp
+metadata:
+  name: demo-exposed-app
+  namespace: example
+spec:
+  image: "nginx:latest"
+  protocol: TCP
+  port: 3000
+  containerPort: 8080

@@ -14,5 +14,8 @@ k8s-apply: kind-load
 k8s-delete:
     kustomize build config | kubectl delete -f -
 
+example-apply:
+    kustomize build examples | kubectl apply -f -
+
 fmt:
     cargo fmt
