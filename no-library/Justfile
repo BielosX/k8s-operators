@@ -1,6 +1,7 @@
 timestamp := `date +%s`
 
 img-build:
+    rm -rf target
     podman build --tag 'no-library:{{timestamp}}' .
     mkdir -p target
     podman save -o target/no-library.tar 'no-library:{{timestamp}}'
