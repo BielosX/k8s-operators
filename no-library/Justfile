@@ -17,5 +17,8 @@ k8s-delete:
 example-apply:
     kustomize build examples | kubectl apply -f -
 
+podman-prune-cache:
+    podman image prune --build-cache
+
 fmt:
     cargo fmt
