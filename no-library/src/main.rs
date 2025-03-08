@@ -1,21 +1,12 @@
 mod k8s_client;
+mod k8s_types;
+mod operator;
 
 use axum::routing::get;
 use axum::Router;
+use operator::operator::handle_custom_resources;
 use std::env;
 use tokio::select;
-use tokio::time::{sleep, Duration};
-use tracing::info;
-use k8s_client::client::K8sClient;
-
-async fn operator() {
-    let client = K8sClient::new().await;
-    loop {
-        let response = client.get_exposed_apps().await;
-        info!("Received: {}", response);
-        sleep(Duration::from_secs(10)).await;
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +17,7 @@ async fn main() {
         .await
         .unwrap();
     select! {
-        _ = tokio::spawn(operator()) => {}
+        _ = tokio::spawn(handle_custom_resources()) => {}
         _ = axum::serve(listener, app) => {}
     }
 }
