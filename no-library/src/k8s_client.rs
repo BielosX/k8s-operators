@@ -7,7 +7,6 @@ pub mod client {
     use reqwest::{Body, Certificate, Client, StatusCode};
     use std::str::from_utf8;
     use tokio::fs;
-    use tracing::info;
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
