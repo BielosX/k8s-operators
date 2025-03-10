@@ -7,6 +7,9 @@ rules:
       - "get"
       - "watch"
       - "list"
+      - "create"
+      - "update"
+      - "patch"
     apiGroups:
       - "stable.no-library.com"
     resources:
