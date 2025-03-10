@@ -1,4 +1,5 @@
 pub mod client {
+    use crate::k8s_client::client::K8sClientError::{Error, NotFound};
     use crate::k8s_types::{ExposedApp, List, Watch};
     use async_stream::stream;
     use futures::Stream;
@@ -6,7 +7,7 @@ pub mod client {
     use reqwest::{Body, Certificate, Client, StatusCode};
     use std::str::from_utf8;
     use tokio::fs;
-    use crate::k8s_client::client::K8sClientError::NotFound;
+    use tracing::info;
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
@@ -34,6 +35,22 @@ pub mod client {
     #[derive(Debug, Clone, Copy)]
     pub enum K8sClientError {
         NotFound,
+        Error,
+    }
+
+    impl K8sClientError {
+        pub fn from_status(status: StatusCode) -> Option<K8sClientError> {
+            match status.as_u16() {
+                404 => Some(NotFound),
+                _ => {
+                    if !status.is_success() {
+                        Some(Error)
+                    } else {
+                        None
+                    }
+                }
+            }
+        }
     }
 
     pub struct K8sClient {
@@ -67,7 +84,10 @@ pub mod client {
             serde_json::from_str::<List<ExposedApp>>(result.text().await.unwrap().as_str()).unwrap()
         }
 
-        pub async fn update_exposed_apps(&self, apps: ExposedApp) -> Result<(), K8sClientError> {
+        pub async fn update_exposed_apps(
+            &self,
+            apps: ExposedApp,
+        ) -> Result<ExposedApp, K8sClientError> {
             let payload = serde_json::to_string(&apps).unwrap();
             let result = self
                 .client
@@ -82,10 +102,13 @@ pub mod client {
                 .send()
                 .await
                 .unwrap();
-            if result.status() == StatusCode::from_u16(404).unwrap() {
-                return Err(NotFound)
-            }
-            Ok(())
+            let status = result.status();
+            let text = result.text().await;
+            K8sClientError::from_status(status)
+                .map(Err)
+                .unwrap_or_else(|| {
+                    Ok(serde_json::from_str::<ExposedApp>(text.unwrap().as_str()).unwrap())
+                })
         }
 
         pub async fn watch_exposed_apps(

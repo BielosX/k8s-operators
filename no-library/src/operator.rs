@@ -4,7 +4,7 @@ pub mod operator {
     use futures::{pin_mut, StreamExt};
     use std::time::Duration;
     use tokio::time::sleep;
-    use tracing::info;
+    use tracing::{error, info};
 
     const FINALIZER_NAME: &str = "exposedapps.stable.no-library.com/finalizer";
 
@@ -42,7 +42,10 @@ pub mod operator {
                         info!("{} is the only one finalizer", FINALIZER_NAME);
                         resource_copy.metadata.finalizers = None;
                     } else {
-                        info!("More than one finalizer found, removing {} only", FINALIZER_NAME);
+                        info!(
+                            "More than one finalizer found, removing {} only",
+                            FINALIZER_NAME
+                        );
                         let new_finalizers: Vec<String> = finalizers
                             .iter()
                             .filter(|&i| i != FINALIZER_NAME)
@@ -54,6 +57,9 @@ pub mod operator {
                         Ok(_) => {}
                         Err(K8sClientError::NotFound) => {
                             info!("Nothing to update, it's fine");
+                        }
+                        Err(K8sClientError::Error) => {
+                            error!("Something wrong happened");
                         }
                     }
                 }
