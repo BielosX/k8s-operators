@@ -1,4 +1,15 @@
 timestamp := `date +%s`
+localbin := justfile_directory() + "/bin"
+kustomize := localbin + "/kustomize"
+
+get-kustomize:
+    #!/bin/bash -e
+    mkdir -p "{{localbin}}"
+    pushd "{{localbin}}"
+    if ! test -x kustomize; then
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+    fi
+    popd
 
 img-build:
     rm -rf target
@@ -9,14 +20,14 @@ img-build:
 kind-load: img-build
     kind load image-archive target/no-library.tar
 
-k8s-apply: kind-load
-    kustomize build config | IMAGE="localhost/no-library:{{timestamp}}" envsubst | kubectl apply -f -
+k8s-apply: get-kustomize kind-load
+    {{kustomize}} build config | IMAGE="localhost/no-library:{{timestamp}}" envsubst | kubectl apply -f -
 
-k8s-delete:
-    kustomize build config | kubectl delete -f -
+k8s-delete: get-kustomize
+    {{kustomize}} build config | kubectl delete -f -
 
-example-apply:
-    kustomize build examples | kubectl apply -f -
+example-apply: get-kustomize
+    {{kustomize}} build examples | kubectl apply -f -
 
 podman-prune-cache:
     podman image prune --build-cache
