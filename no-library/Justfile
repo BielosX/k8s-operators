@@ -1,15 +1,17 @@
 timestamp := `date +%s`
 localbin := justfile_directory() + "/bin"
 kustomize := localbin + "/kustomize"
+kustomize-version := "5.6.0"
+kustomize-url := "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 
 get-kustomize:
     #!/bin/bash -e
     mkdir -p "{{localbin}}"
-    pushd "{{localbin}}"
-    if ! test -x kustomize; then
-        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+    cd "{{localbin}}"
+    if ! test -x kustomize || ! {{kustomize}} version | grep -q "{{kustomize-version}}"; then
+        rm -rf "{{kustomize}}"
+        curl -s "{{kustomize-url}}" | bash -s "{{kustomize-version}}"
     fi
-    popd
 
 img-build:
     rm -rf target
