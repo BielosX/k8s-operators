@@ -1,6 +1,7 @@
 mod k8s_client;
 mod k8s_types;
 mod operator;
+mod reconciler;
 
 use axum::routing::get;
 use axum::Router;
