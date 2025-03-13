@@ -8,16 +8,16 @@ use tracing::{error, info};
 
 const FINALIZER_NAME: &str = "exposedapps.stable.no-library.com/finalizer";
 
-pub struct Reconciler<'a> {
-    client: &'a K8sClient,
+pub struct Reconciler {
+    client: K8sClient,
 }
 
-impl<'a> Reconciler<'a> {
-    pub fn new(client: &'a K8sClient) -> Self {
+impl Reconciler {
+    pub fn new(client: K8sClient) -> Self {
         Reconciler { client }
     }
 
-    async fn clean_up(&self, resource: &K8sObject<ExposedApp>) {
+    async fn clean_up(&mut self, resource: &K8sObject<ExposedApp>) {
         let name = resource.metadata.name.clone().unwrap();
         let namespace = resource.metadata.namespace.clone().unwrap();
         info!(
@@ -25,7 +25,8 @@ impl<'a> Reconciler<'a> {
             name, namespace
         );
         let deployment_name = format!("{}-deployment", name);
-        let deployment_delete_result = self.client
+        let deployment_delete_result = self
+            .client
             .delete(
                 namespace.as_str(),
                 "deployments",
@@ -45,7 +46,7 @@ impl<'a> Reconciler<'a> {
         }
     }
 
-    async fn handle_finalizer(&self, resource: &K8sObject<ExposedApp>) -> bool {
+    async fn handle_finalizer(&mut self, resource: &K8sObject<ExposedApp>) -> bool {
         let mut resource_copy: K8sObject<ExposedApp> = resource.clone();
         match &resource.metadata.finalizers {
             None => {
@@ -90,7 +91,7 @@ impl<'a> Reconciler<'a> {
         }
     }
 
-    pub async fn reconcile(&self, resource: &K8sObject<ExposedApp>) {
+    pub async fn reconcile(&mut self, resource: &K8sObject<ExposedApp>) {
         let finalized = self.handle_finalizer(resource).await;
         if !finalized {
             let name = resource.metadata.name.clone().unwrap();

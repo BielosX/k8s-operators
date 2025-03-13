@@ -4,12 +4,15 @@ pub mod client {
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
-    use reqwest::{Body, Certificate, Client, RequestBuilder, StatusCode};
+    use reqwest::{Certificate, Client, RequestBuilder, Response, StatusCode};
     use serde::de::DeserializeOwned;
     use serde::Serialize;
     use serde_json::{from_str, to_string};
     use std::str::from_utf8;
+    use std::time::Duration;
     use tokio::fs;
+    use tokio::time::sleep;
+    use tracing::info;
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
@@ -57,6 +60,7 @@ pub mod client {
         }
     }
 
+    #[derive(Clone)]
     pub struct K8sClient {
         client: Client,
         token: String,
@@ -77,14 +81,13 @@ pub mod client {
             headers
         }
 
-        pub async fn get_exposed_apps(&self) -> List<K8sObject<ExposedApp>> {
+        pub async fn get_exposed_apps(&mut self) -> List<K8sObject<ExposedApp>> {
             let result = self
-                .client
-                .get(format!("{}{}", API_SERVER, EXPOSED_APPS_LIST))
-                .headers(self.get_auth_header())
-                .send()
-                .await
-                .unwrap();
+                .send_with_retry(
+                    self.client
+                        .get(format!("{}{}", API_SERVER, EXPOSED_APPS_LIST)),
+                )
+                .await;
             from_str::<List<K8sObject<ExposedApp>>>(result.text().await.unwrap().as_str()).unwrap()
         }
 
@@ -96,7 +99,7 @@ pub mod client {
           IT'S NOT TRUE FOR DEPLOYMENT
         */
         pub async fn put<T: Serialize + DeserializeOwned>(
-            &self,
+            &mut self,
             item: &K8sObject<T>,
             namespace: &str,
             resource_type: &str,
@@ -112,7 +115,7 @@ pub mod client {
         }
 
         pub async fn post<T: Serialize + DeserializeOwned>(
-            &self,
+            &mut self,
             item: &K8sObject<T>,
             namespace: &str,
             resource_type: &str,
@@ -126,18 +129,45 @@ pub mod client {
             self.execute(self.client.post(url), item).await
         }
 
+        async fn refresh_token(&mut self) {
+            self.token = get_token().await;
+        }
+
+        async fn send_with_retry(&mut self, builder: RequestBuilder) -> Response {
+            let mut result = builder
+                .try_clone()
+                .unwrap()
+                .headers(self.get_auth_header())
+                .send()
+                .await
+                .unwrap();
+            let mut last_status = result.status().as_u16();
+            let mut retries = 3;
+            while last_status == 401 && retries > 0 {
+                info!("Refreshing token");
+                sleep(Duration::from_secs(10)).await;
+                self.refresh_token().await;
+                let response =  builder
+                    .try_clone()
+                    .unwrap()
+                    .headers(self.get_auth_header())
+                    .send()
+                    .await
+                    .unwrap();
+                last_status = response.status().as_u16();
+                result = response;
+                retries = retries - 1;
+            }
+            result
+        }
+
         async fn execute<T: Serialize + DeserializeOwned>(
-            &self,
+            &mut self,
             builder: RequestBuilder,
             item: &K8sObject<T>,
         ) -> Result<K8sObject<T>, K8sClientError> {
             let payload = to_string(&item).unwrap();
-            let result = builder
-                .headers(self.get_auth_header())
-                .body(Body::from(payload))
-                .send()
-                .await
-                .unwrap();
+            let result = self.send_with_retry(builder.body(payload)).await;
             let status = result.status();
             let text = result.text().await.unwrap();
             K8sClientError::from_status(status)
@@ -149,7 +179,7 @@ pub mod client {
         }
 
         pub async fn put_exposed_app(
-            &self,
+            &mut self,
             apps: &K8sObject<ExposedApp>,
         ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
             let name = apps.metadata.name.clone().unwrap();
@@ -166,7 +196,7 @@ pub mod client {
         }
 
         pub async fn put_deployment(
-            &self,
+            &mut self,
             deployment: &K8sObject<Deployment>,
         ) -> Result<K8sObject<Deployment>, K8sClientError> {
             let name = deployment.metadata.name.clone().unwrap();
@@ -183,7 +213,7 @@ pub mod client {
         }
 
         pub async fn post_deployment(
-            &self,
+            &mut self,
             deployment: &K8sObject<Deployment>,
         ) -> Result<K8sObject<Deployment>, K8sClientError> {
             let namespace = deployment.metadata.namespace.clone().unwrap();
@@ -192,7 +222,7 @@ pub mod client {
         }
 
         pub async fn delete(
-            &self,
+            &mut self,
             namespace: &str,
             resource_type: &str,
             group: &str,
@@ -203,32 +233,22 @@ pub mod client {
                 "{}/apis/{}/{}/namespaces/{}/{}/{}",
                 API_SERVER, group, version, namespace, resource_type, name
             );
-            let response = self
-                .client
-                .delete(url.clone())
-                .headers(self.get_auth_header())
-                .send()
-                .await
-                .unwrap();
+            let response = self.send_with_retry(self.client.delete(url)).await;
             K8sClientError::from_status(response.status())
                 .map(Err)
                 .unwrap_or(Ok(()))
         }
 
         pub async fn watch_exposed_apps(
-            &self,
+            &mut self,
             resource_version: &str,
         ) -> impl Stream<Item = Watch<K8sObject<ExposedApp>>> {
             let mut response = self
-                .client
-                .get(format!(
+                .send_with_retry(self.client.get(format!(
                     "{}{}?watch=1&resourceVersion={}",
                     API_SERVER, EXPOSED_APPS_LIST, resource_version
-                ))
-                .headers(self.get_auth_header())
-                .send()
-                .await
-                .unwrap();
+                )))
+                .await;
             stream! {
                 loop {
                     if let Some(chunk) = response.chunk().await.unwrap() {

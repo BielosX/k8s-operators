@@ -7,8 +7,8 @@ pub mod operator {
     use tracing::info;
 
     pub async fn handle_custom_resources() {
-        let client = K8sClient::new().await;
-        let reconciler = Reconciler::new(&client);
+        let mut client = K8sClient::new().await;
+        let mut reconciler = Reconciler::new(client.clone());
         loop {
             let exposed_apps = client.get_exposed_apps().await;
             let stream = client
