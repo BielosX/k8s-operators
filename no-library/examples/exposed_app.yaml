@@ -4,7 +4,8 @@ metadata:
   name: demo-exposed-app
   namespace: example
 spec:
+  replicas: 2
   image: "nginx:latest"
   protocol: TCP
-  port: 3000
+  port: 3003
   containerPort: 8080

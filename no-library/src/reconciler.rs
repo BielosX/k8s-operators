@@ -1,5 +1,9 @@
 use crate::k8s_client::client::{K8sClient, K8sClientError};
-use crate::k8s_types::ExposedApp;
+use crate::k8s_types::{
+    Container, Deployment, DeploymentSpec, ExposedApp, K8sObject, Metadata, PodSpec, PodTemplate,
+    Selector,
+};
+use std::collections::HashMap;
 use tracing::{error, info};
 
 const FINALIZER_NAME: &str = "exposedapps.stable.no-library.com/finalizer";
@@ -13,18 +17,32 @@ impl<'a> Reconciler<'a> {
         Reconciler { client }
     }
 
-    async fn clean_up(&self, resource: &ExposedApp) {}
+    async fn clean_up(&self, resource: &K8sObject<ExposedApp>) {
+        let name = resource.metadata.name.clone().unwrap();
+        let namespace = resource.metadata.namespace.clone().unwrap();
+        info!(
+            "Deleting related resources for {} namespace {}",
+            name, namespace
+        );
+        self.client
+            .delete(
+                namespace.as_str(),
+                "deployments",
+                "apps",
+                "v1",
+                format!("{}-deployment", name).as_str(),
+            )
+            .await
+            .unwrap();
+    }
 
-    async fn handle_finalizer(&self, resource: &ExposedApp) -> bool {
-        let mut resource_copy: ExposedApp = resource.clone();
+    async fn handle_finalizer(&self, resource: &K8sObject<ExposedApp>) -> bool {
+        let mut resource_copy: K8sObject<ExposedApp> = resource.clone();
         match &resource.metadata.finalizers {
             None => {
                 info!("Adding finalizer");
                 resource_copy.metadata.finalizers = Some(vec![FINALIZER_NAME.to_string()]);
-                self.client
-                    .update_exposed_apps(resource_copy)
-                    .await
-                    .unwrap();
+                self.client.put_exposed_app(&resource_copy).await.unwrap();
                 false
             }
             Some(finalizers) => {
@@ -46,12 +64,12 @@ impl<'a> Reconciler<'a> {
                         resource_copy.metadata.finalizers = Some(new_finalizers);
                     }
                     self.clean_up(&resource_copy).await;
-                    match self.client.update_exposed_apps(resource_copy).await {
+                    match self.client.put_exposed_app(&resource_copy).await {
                         Ok(_) => {}
                         Err(K8sClientError::NotFound) => {
                             info!("Nothing to update, it's fine");
                         }
-                        Err(K8sClientError::Error) => {
+                        Err(_) => {
                             error!("Something wrong happened");
                         }
                     }
@@ -63,10 +81,62 @@ impl<'a> Reconciler<'a> {
         }
     }
 
-    pub async fn reconcile(&self, resource: &ExposedApp) {
+    pub async fn reconcile(&self, resource: &K8sObject<ExposedApp>) {
         let finalized = self.handle_finalizer(resource).await;
         if !finalized {
-            info!("Synchronizing resource");
+            let name = resource.metadata.name.clone().unwrap();
+            let namespace = resource.metadata.namespace.clone().unwrap();
+            info!("Synchronizing resource {} namespace {}", name, namespace,);
+            let deployment_name = format!("{}-deployment", name);
+            let pod_labels = HashMap::from([(
+                String::from("app.kubernetes.io/instance"),
+                deployment_name.clone(),
+            )]);
+            let deployment = K8sObject {
+                api_version: String::from("apps/v1"),
+                kind: String::from("Deployment"),
+                metadata: Metadata {
+                    name: Some(deployment_name.clone()),
+                    namespace: Some(namespace),
+                    ..Metadata::default()
+                },
+                object: Deployment {
+                    spec: DeploymentSpec {
+                        replicas: resource.object.spec.replicas,
+                        selector: {
+                            Selector {
+                                match_labels: pod_labels.clone(),
+                            }
+                        },
+                        template: PodTemplate {
+                            metadata: Metadata {
+                                labels: Some(pod_labels),
+                                name: Some(name),
+                                ..Metadata::default()
+                            },
+                            spec: PodSpec {
+                                containers: vec![Container {
+                                    name: String::from("main"),
+                                    image: resource.object.spec.image.clone(),
+                                }],
+                            },
+                        },
+                    },
+                },
+            };
+            let post_deployment_result = self.client.post_deployment(&deployment).await;
+            match post_deployment_result {
+                Ok(_) => {}
+                Err(K8sClientError::Conflict) => {
+                    info!(
+                        "Deployment {} already exists, updating",
+                        deployment_name.clone()
+                    );
+                    self.client.put_deployment(&deployment).await.unwrap();
+                }
+                Err(_) => {}
+            }
+            info!("Deployment {} created", deployment_name);
         }
     }
 }

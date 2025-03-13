@@ -1,10 +1,13 @@
 pub mod client {
-    use crate::k8s_client::client::K8sClientError::{Error, NotFound};
-    use crate::k8s_types::{ExposedApp, List, Watch};
+    use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
+    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, List, Watch};
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
-    use reqwest::{Body, Certificate, Client, StatusCode};
+    use reqwest::{Body, Certificate, Client, RequestBuilder, StatusCode};
+    use serde::de::DeserializeOwned;
+    use serde::Serialize;
+    use serde_json::{from_str, to_string};
     use std::str::from_utf8;
     use tokio::fs;
 
@@ -34,6 +37,7 @@ pub mod client {
     #[derive(Debug, Clone, Copy)]
     pub enum K8sClientError {
         NotFound,
+        Conflict,
         Error,
     }
 
@@ -41,6 +45,7 @@ pub mod client {
         pub fn from_status(status: StatusCode) -> Option<K8sClientError> {
             match status.as_u16() {
                 404 => Some(NotFound),
+                409 => Some(Conflict),
                 _ => {
                     if !status.is_success() {
                         Some(Error)
@@ -72,7 +77,7 @@ pub mod client {
             headers
         }
 
-        pub async fn get_exposed_apps(&self) -> List<ExposedApp> {
+        pub async fn get_exposed_apps(&self) -> List<K8sObject<ExposedApp>> {
             let result = self
                 .client
                 .get(format!("{}{}", API_SERVER, EXPOSED_APPS_LIST))
@@ -80,40 +85,140 @@ pub mod client {
                 .send()
                 .await
                 .unwrap();
-            serde_json::from_str::<List<ExposedApp>>(result.text().await.unwrap().as_str()).unwrap()
+            from_str::<List<K8sObject<ExposedApp>>>(result.text().await.unwrap().as_str()).unwrap()
         }
 
-        pub async fn update_exposed_apps(
+        /*
+          https://kubernetes.io/docs/reference/using-api/api-concepts/#api-verbs
+          For PUT requests, Kubernetes internally classifies these as
+          either create or update based on the state of the existing object.
+
+          IT'S NOT TRUE FOR DEPLOYMENT
+        */
+        pub async fn put<T: Serialize + DeserializeOwned>(
             &self,
-            apps: ExposedApp,
-        ) -> Result<ExposedApp, K8sClientError> {
-            let payload = serde_json::to_string(&apps).unwrap();
-            let result = self
-                .client
-                .put(format!(
-                    "{}/apis/stable.no-library.com/v1/namespaces/{}/exposedapps/{}",
-                    API_SERVER,
-                    apps.metadata.namespace.unwrap(),
-                    apps.metadata.name.unwrap(),
-                ))
+            item: &K8sObject<T>,
+            namespace: &str,
+            resource_type: &str,
+            group: &str,
+            version: &str,
+            name: &str,
+        ) -> Result<K8sObject<T>, K8sClientError> {
+            let url = format!(
+                "{}/apis/{}/{}/namespaces/{}/{}/{}",
+                API_SERVER, group, version, namespace, resource_type, name
+            );
+            self.execute(self.client.put(url), item).await
+        }
+
+        pub async fn post<T: Serialize + DeserializeOwned>(
+            &self,
+            item: &K8sObject<T>,
+            namespace: &str,
+            resource_type: &str,
+            group: &str,
+            version: &str,
+        ) -> Result<K8sObject<T>, K8sClientError> {
+            let url = format!(
+                "{}/apis/{}/{}/namespaces/{}/{}",
+                API_SERVER, group, version, namespace, resource_type,
+            );
+            self.execute(self.client.post(url), item).await
+        }
+
+        async fn execute<T: Serialize + DeserializeOwned>(
+            &self,
+            builder: RequestBuilder,
+            item: &K8sObject<T>,
+        ) -> Result<K8sObject<T>, K8sClientError> {
+            let payload = to_string(&item).unwrap();
+            let result = builder
                 .headers(self.get_auth_header())
                 .body(Body::from(payload))
                 .send()
                 .await
                 .unwrap();
             let status = result.status();
-            let text = result.text().await;
+            let text = result.text().await.unwrap();
             K8sClientError::from_status(status)
                 .map(Err)
                 .unwrap_or_else(|| {
-                    Ok(serde_json::from_str::<ExposedApp>(text.unwrap().as_str()).unwrap())
+                    let object = from_str::<K8sObject<T>>(text.as_str()).unwrap();
+                    Ok(object)
                 })
+        }
+
+        pub async fn put_exposed_app(
+            &self,
+            apps: &K8sObject<ExposedApp>,
+        ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
+            let name = apps.metadata.name.clone().unwrap();
+            let namespace = apps.metadata.namespace.clone().unwrap();
+            self.put(
+                apps,
+                namespace.as_str(),
+                "exposedapps",
+                "stable.no-library.com",
+                "v1",
+                name.as_str(),
+            )
+            .await
+        }
+
+        pub async fn put_deployment(
+            &self,
+            deployment: &K8sObject<Deployment>,
+        ) -> Result<K8sObject<Deployment>, K8sClientError> {
+            let name = deployment.metadata.name.clone().unwrap();
+            let namespace = deployment.metadata.namespace.clone().unwrap();
+            self.put(
+                deployment,
+                namespace.as_str(),
+                "deployments",
+                "apps",
+                "v1",
+                name.as_str(),
+            )
+            .await
+        }
+
+        pub async fn post_deployment(
+            &self,
+            deployment: &K8sObject<Deployment>,
+        ) -> Result<K8sObject<Deployment>, K8sClientError> {
+            let namespace = deployment.metadata.namespace.clone().unwrap();
+            self.post(deployment, namespace.as_str(), "deployments", "apps", "v1")
+                .await
+        }
+
+        pub async fn delete(
+            &self,
+            namespace: &str,
+            resource_type: &str,
+            group: &str,
+            version: &str,
+            name: &str,
+        ) -> Result<(), K8sClientError> {
+            let url = format!(
+                "{}/apis/{}/{}/namespaces/{}/{}/{}",
+                API_SERVER, group, version, namespace, resource_type, name
+            );
+            let response = self
+                .client
+                .delete(url)
+                .headers(self.get_auth_header())
+                .send()
+                .await
+                .unwrap();
+            K8sClientError::from_status(response.status())
+                .map(Err)
+                .unwrap_or(Ok(()))
         }
 
         pub async fn watch_exposed_apps(
             &self,
             resource_version: &str,
-        ) -> impl Stream<Item = Watch<ExposedApp>> {
+        ) -> impl Stream<Item = Watch<K8sObject<ExposedApp>>> {
             let mut response = self
                 .client
                 .get(format!(
@@ -127,7 +232,7 @@ pub mod client {
             stream! {
                 loop {
                     if let Some(chunk) = response.chunk().await.unwrap() {
-                        let event = serde_json::from_str::<Watch<ExposedApp>>(from_utf8(chunk.as_ref()).unwrap()).unwrap();
+                        let event = from_str::<Watch<K8sObject<ExposedApp>>>(from_utf8(chunk.as_ref()).unwrap()).unwrap();
                         yield event;
                     } else {
                         break;

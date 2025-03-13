@@ -14,3 +14,12 @@ rules:
       - "stable.no-library.com"
     resources:
       - "exposedapps"
+  - verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+    apiGroups:
+      - "apps"
+    resources:
+      - "deployments"

@@ -22,6 +22,8 @@ spec:
             spec:
               type: object
               properties:
+                replicas:
+                  type: integer
                 image:
                   type: string
                 protocol:
