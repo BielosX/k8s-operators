@@ -24,16 +24,25 @@ impl<'a> Reconciler<'a> {
             "Deleting related resources for {} namespace {}",
             name, namespace
         );
-        self.client
+        let deployment_name = format!("{}-deployment", name);
+        let deployment_delete_result = self.client
             .delete(
                 namespace.as_str(),
                 "deployments",
                 "apps",
                 "v1",
-                format!("{}-deployment", name).as_str(),
+                deployment_name.as_str(),
             )
-            .await
-            .unwrap();
+            .await;
+        match deployment_delete_result {
+            Ok(_) => {}
+            Err(K8sClientError::NotFound) => {
+                info!("Deployment {} not found, that's fine", deployment_name);
+            }
+            Err(_) => {
+                error!("Something wrong happened while trying to delete deployment");
+            }
+        }
     }
 
     async fn handle_finalizer(&self, resource: &K8sObject<ExposedApp>) -> bool {

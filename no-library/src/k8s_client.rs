@@ -205,7 +205,7 @@ pub mod client {
             );
             let response = self
                 .client
-                .delete(url)
+                .delete(url.clone())
                 .headers(self.get_auth_header())
                 .send()
                 .await
