@@ -12,8 +12,7 @@ pub mod client {
     use std::time::Duration;
     use tokio::fs;
     use tokio::time::sleep;
-    use tracing::info;
-    use tracing::log::error;
+    use tracing::{error, info};
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";

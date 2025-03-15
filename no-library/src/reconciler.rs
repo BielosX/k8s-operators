@@ -178,11 +178,13 @@ impl Reconciler {
                 },
                 object: Service {
                     spec: ServiceSpec {
+                        service_type: resource.object.spec.service_type.clone(),
                         selector: pod_labels,
                         ports: vec![ServicePort {
                             protocol: resource.object.spec.protocol.clone(),
                             port: resource.object.spec.port,
                             target_port: resource.object.spec.container_port,
+                            node_port: resource.object.spec.node_port,
                         }],
                     },
                 },

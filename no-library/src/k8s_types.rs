@@ -43,6 +43,8 @@ pub struct ExposedAppSpec {
     pub image: String,
     pub port: u32,
     pub protocol: String,
+    pub node_port: Option<u32>,
+    pub service_type: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -123,6 +125,8 @@ pub struct Service {
 
 #[derive(Serialize, Deserialize)]
 pub struct ServiceSpec {
+    #[serde(rename = "type")]
+    pub service_type: Option<String>,
     pub selector: HashMap<String, String>,
     pub ports: Vec<ServicePort>,
 }
@@ -133,4 +137,5 @@ pub struct ServicePort {
     pub protocol: String,
     pub port: u32,
     pub target_port: u32,
+    pub node_port: Option<u32>,
 }

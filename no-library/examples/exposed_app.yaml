@@ -8,4 +8,6 @@ spec:
   image: "nginx:latest"
   protocol: TCP
   port: 3000
-  containerPort: 8080
+  containerPort: 80
+  nodePort: 30950
+  serviceType: "NodePort"
