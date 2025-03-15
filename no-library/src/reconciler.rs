@@ -1,7 +1,7 @@
 use crate::k8s_client::client::{K8sClient, K8sClientError};
 use crate::k8s_types::{
-    Container, Deployment, DeploymentSpec, ExposedApp, K8sObject, Metadata, PodSpec, PodTemplate,
-    Selector,
+    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, K8sObject, Metadata, PodSpec,
+    PodTemplate, Selector, Service, ServicePort, ServiceSpec,
 };
 use std::collections::HashMap;
 use tracing::{error, info};
@@ -42,6 +42,22 @@ impl Reconciler {
             }
             Err(_) => {
                 error!("Something wrong happened while trying to delete deployment");
+            }
+        }
+        let service_name = format!("{}-service", name);
+        let service_delete_result = self
+            .client
+            .delete_uri(
+                format!("/api/v1/namespaces/{}/services/{}", namespace, service_name).as_str(),
+            )
+            .await;
+        match service_delete_result {
+            Ok(_) => {}
+            Err(K8sClientError::NotFound) => {
+                info!("Service {} not found, that's fine", deployment_name);
+            }
+            Err(_) => {
+                error!("Something wrong happened while trying to delete service");
             }
         }
     }
@@ -107,7 +123,7 @@ impl Reconciler {
                 kind: String::from("Deployment"),
                 metadata: Metadata {
                     name: Some(deployment_name.clone()),
-                    namespace: Some(namespace),
+                    namespace: Some(namespace.clone()),
                     ..Metadata::default()
                 },
                 object: Deployment {
@@ -120,14 +136,17 @@ impl Reconciler {
                         },
                         template: PodTemplate {
                             metadata: Metadata {
-                                labels: Some(pod_labels),
-                                name: Some(name),
+                                labels: Some(pod_labels.clone()),
+                                name: Some(name.clone()),
                                 ..Metadata::default()
                             },
                             spec: PodSpec {
                                 containers: vec![Container {
                                     name: String::from("main"),
                                     image: resource.object.spec.image.clone(),
+                                    ports: vec![ContainerPort {
+                                        container_port: resource.object.spec.container_port,
+                                    }],
                                 }],
                             },
                         },
@@ -144,9 +163,39 @@ impl Reconciler {
                     );
                     self.client.put_deployment(&deployment).await.unwrap();
                 }
-                Err(_) => {}
+                Err(e) => {
+                    error!("Error occurred while creating a deployment: {:?}", e);
+                }
             }
-            info!("Deployment {} created", deployment_name);
+            let service_name = format!("{}-service", name);
+            let service = K8sObject {
+                api_version: String::from("v1"),
+                kind: String::from("Service"),
+                metadata: Metadata {
+                    name: Some(service_name),
+                    namespace: Some(namespace),
+                    ..Metadata::default()
+                },
+                object: Service {
+                    spec: ServiceSpec {
+                        selector: pod_labels,
+                        ports: vec![ServicePort {
+                            protocol: resource.object.spec.protocol.clone(),
+                            port: resource.object.spec.port,
+                            target_port: resource.object.spec.container_port,
+                        }],
+                    },
+                },
+            };
+            let put_service_result = self.client.put_service(&service).await;
+            match put_service_result {
+                Ok(_) => {
+                    info!("Service created/updated");
+                }
+                Err(e) => {
+                    error!("Error occurred while creating a service: {:?}", e);
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 pub mod client {
     use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
-    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, List, Watch};
+    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, List, Service, Watch};
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
@@ -13,6 +13,7 @@ pub mod client {
     use tokio::fs;
     use tokio::time::sleep;
     use tracing::info;
+    use tracing::log::error;
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
@@ -97,6 +98,7 @@ pub mod client {
           either create or update based on the state of the existing object.
 
           IT'S NOT TRUE FOR DEPLOYMENT
+          WORKS FINE FOR SERVICE
         */
         pub async fn put<T: Serialize + DeserializeOwned>(
             &mut self,
@@ -111,6 +113,14 @@ pub mod client {
                 "{}/apis/{}/{}/namespaces/{}/{}/{}",
                 API_SERVER, group, version, namespace, resource_type, name
             );
+            self.put_with_url(item, url.as_str()).await
+        }
+
+        async fn put_with_url<T: Serialize + DeserializeOwned>(
+            &mut self,
+            item: &K8sObject<T>,
+            url: &str,
+        ) -> Result<K8sObject<T>, K8sClientError> {
             self.execute(self.client.put(url), item).await
         }
 
@@ -147,7 +157,7 @@ pub mod client {
                 info!("Refreshing token");
                 sleep(Duration::from_secs(10)).await;
                 self.refresh_token().await;
-                let response =  builder
+                let response = builder
                     .try_clone()
                     .unwrap()
                     .headers(self.get_auth_header())
@@ -212,6 +222,19 @@ pub mod client {
             .await
         }
 
+        pub async fn put_service(
+            &mut self,
+            service: &K8sObject<Service>,
+        ) -> Result<K8sObject<Service>, K8sClientError> {
+            let name = service.metadata.name.clone().unwrap();
+            let namespace = service.metadata.namespace.clone().unwrap();
+            let url = format!(
+                "{}/api/v1/namespaces/{}/services/{}",
+                API_SERVER, namespace, name,
+            );
+            self.put_with_url(service, url.as_str()).await
+        }
+
         pub async fn post_deployment(
             &mut self,
             deployment: &K8sObject<Deployment>,
@@ -229,10 +252,15 @@ pub mod client {
             version: &str,
             name: &str,
         ) -> Result<(), K8sClientError> {
-            let url = format!(
-                "{}/apis/{}/{}/namespaces/{}/{}/{}",
-                API_SERVER, group, version, namespace, resource_type, name
+            let uri = format!(
+                "/apis/{}{}/namespaces/{}/{}/{}",
+                group, version, namespace, resource_type, name
             );
+            self.delete_uri(uri.as_str()).await
+        }
+
+        pub async fn delete_uri(&mut self, uri: &str) -> Result<(), K8sClientError> {
+            let url = format!("{}{}", API_SERVER, uri);
             let response = self.send_with_retry(self.client.delete(url)).await;
             K8sClientError::from_status(response.status())
                 .map(Err)

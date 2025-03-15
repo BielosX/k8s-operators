@@ -23,3 +23,11 @@ rules:
       - "apps"
     resources:
       - "deployments"
+  - verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+    apiGroups: [""]
+    resources:
+      - "services"

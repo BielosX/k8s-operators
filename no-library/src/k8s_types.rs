@@ -104,7 +104,33 @@ pub struct PodSpec {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerPort {
+    pub container_port: u32,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Container {
     pub name: String,
     pub image: String,
+    pub ports: Vec<ContainerPort>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Service {
+    pub spec: ServiceSpec,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ServiceSpec {
+    pub selector: HashMap<String, String>,
+    pub ports: Vec<ServicePort>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServicePort {
+    pub protocol: String,
+    pub port: u32,
+    pub target_port: u32,
 }
