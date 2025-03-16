@@ -1,12 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: no-library-role-binding
+  namespace: no-library
 subjects:
   - kind: ServiceAccount
     name: no-library
     namespace: no-library
 roleRef:
-  kind: ClusterRole
-  name: no-library-cluster-role
+  kind: Role
+  name: no-library-role
   apiGroup: rbac.authorization.k8s.io

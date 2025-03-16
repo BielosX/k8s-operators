@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: no-library-role
+  name: no-library-cluster-role
 rules:
   - verbs:
       - "get"

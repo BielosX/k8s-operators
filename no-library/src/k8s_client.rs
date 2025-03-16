@@ -1,18 +1,22 @@
 pub mod client {
     use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
-    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, List, Service, Watch};
+    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, Lease, List, Service, Watch};
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
     use reqwest::{Certificate, Client, RequestBuilder, Response, StatusCode};
     use serde::de::DeserializeOwned;
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
     use serde_json::{from_str, to_string};
+    use std::num::NonZeroU8;
     use std::str::from_utf8;
     use std::time::Duration;
+    use time::format_description::well_known::iso8601::{Config, EncodedConfig, TimePrecision};
+    use time::format_description::well_known::Iso8601;
+    use time::OffsetDateTime;
     use tokio::fs;
     use tokio::time::sleep;
-    use tracing::{error, info};
+    use tracing::info;
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
@@ -64,6 +68,13 @@ pub mod client {
     pub struct K8sClient {
         client: Client,
         token: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct JsonPatchEntry<T> {
+        op: String,
+        path: String,
+        value: T,
     }
 
     impl K8sClient {
@@ -286,6 +297,75 @@ pub mod client {
                     }
                 }
             }
+        }
+
+        pub async fn get_lease(
+            &mut self,
+            namespace: &str,
+            name: &str,
+        ) -> Result<K8sObject<Lease>, K8sClientError> {
+            let url = format!(
+                "{}/apis/coordination.k8s.io/v1/namespaces/{}/leases/{}",
+                API_SERVER, namespace, name
+            );
+            let result = self.send_with_retry(self.client.get(url)).await;
+            let status = result.status();
+            let text = result.text().await.unwrap();
+            K8sClientError::from_status(status)
+                .map(Err)
+                .unwrap_or_else(|| {
+                    let lease = from_str::<K8sObject<Lease>>(text.as_str()).unwrap();
+                    Ok(lease)
+                })
+        }
+
+        pub async fn patch_lease(
+            &mut self,
+            namespace: &str,
+            name: &str,
+            resource_version: &str,
+            holder_identity: &str,
+            acquire_time: OffsetDateTime,
+        ) -> Result<(), K8sClientError> {
+            const CONFIG: EncodedConfig = Config::DEFAULT
+                .set_time_precision(TimePrecision::Second {
+                    decimal_digits: NonZeroU8::new(6),
+                })
+                .encode();
+            let entries = vec![
+                JsonPatchEntry {
+                    op: String::from("test"),
+                    path: String::from("/metadata/resourceVersion"),
+                    value: String::from(resource_version),
+                },
+                JsonPatchEntry {
+                    op: String::from("add"),
+                    path: String::from("/spec/holderIdentity"),
+                    value: String::from(holder_identity),
+                },
+                JsonPatchEntry {
+                    op: String::from("add"),
+                    path: String::from("/spec/acquireTime"),
+                    value: acquire_time.format(&Iso8601::<CONFIG>).unwrap(),
+                },
+            ];
+            let serialized = to_string(&entries).unwrap();
+            let url = format!(
+                "{}/apis/coordination.k8s.io/v1/namespaces/{}/leases/{}",
+                API_SERVER, namespace, name
+            );
+            let response = self
+                .send_with_retry(
+                    self.client
+                        .patch(url)
+                        .body(serialized)
+                        .header("Content-Type", "application/json-patch+json"),
+                )
+                .await;
+            let status = response.status();
+            K8sClientError::from_status(status)
+                .map(Err)
+                .unwrap_or(Ok(()))
         }
     }
 }

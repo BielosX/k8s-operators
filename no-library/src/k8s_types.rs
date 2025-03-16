@@ -139,3 +139,16 @@ pub struct ServicePort {
     pub target_port: u32,
     pub node_port: Option<u32>,
 }
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaseSpec {
+    pub lease_duration_seconds: u32,
+    pub holder_identity: Option<String>,
+    pub acquire_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Lease {
+    pub spec: LeaseSpec,
+}
