@@ -23,6 +23,8 @@ spec:
         - name: manager
           image: "${IMAGE}"
           env:
+            - name: RUST_LOG
+              value: "info"
             - name: PORT
               value: "8080"
             - name: POD_NAME
@@ -43,8 +45,8 @@ spec:
               port: 8080
               path: /healthz
           readinessProbe:
-            initialDelaySeconds: 5
+            initialDelaySeconds: 20
             periodSeconds: 10
             httpGet:
               port: 8080
-              path: /healthz
+              path: /readyz

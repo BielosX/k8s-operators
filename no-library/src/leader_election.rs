@@ -75,6 +75,7 @@ impl LeaderElector {
                     )
                     .await
                     .unwrap();
+                self.is_leader_elected.store(true, Ordering::SeqCst);
             } else if can_acquire {
                 info!("Trying to acquire the lease");
                 let acquire_result = self
@@ -104,6 +105,11 @@ impl LeaderElector {
                         error!("Something went wrong during leader election");
                     }
                 }
+            } else {
+                info!(
+                    "Lease acquired by some other POD and lease duration second hasn't passed yet"
+                );
+                self.is_leader_elected.store(true, Ordering::SeqCst);
             }
             info!("Waiting for {}", seconds);
             sleep(std::time::Duration::from_secs(seconds as u64)).await;
