@@ -1,0 +1,9 @@
+apiVersion: stable.k3builder.com/v1
+kind: ExposedApp
+metadata:
+  labels:
+    app.kubernetes.io/name: k3builder
+    app.kubernetes.io/managed-by: kustomize
+  name: exposedapp-sample
+spec:
+  # TODO(user): Add fields here
