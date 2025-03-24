@@ -1,0 +1,17 @@
+kustomize-bin := justfile_directory() + "/bin/kustomize"
+
+kustomize:
+    make kustomize
+
+deploy:
+    #!/bin/bash -e
+    TAG=$(date +%s)
+    export IMG="controller:${TAG}"
+    make manifests docker-build
+    kind load docker-image "${IMG}"
+    make install deploy
+
+apply-example: kustomize
+    {{kustomize-bin}} build examples | kubectl apply -f -
+
+

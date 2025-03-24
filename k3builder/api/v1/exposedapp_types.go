@@ -28,13 +28,15 @@ type ExposedAppSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Replicas      int    `json:"replicas"`
-	Image         string `json:"image"`
+	Replicas int32  `json:"replicas"`
+	Image    string `json:"image"`
+	// +kubebuilder:validation:Enum=TCP;UDP
 	Protocol      string `json:"protocol"`
-	Port          int    `json:"port"`
-	ContainerPort int    `json:"containerPort"`
-	NodePort      int    `json:"nodePort"`
-	ServiceType   string `json:"serviceType"`
+	Port          int32  `json:"port"`
+	ContainerPort int32  `json:"containerPort"`
+	NodePort      *int32 `json:"nodePort,omitempty"`
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort
+	ServiceType string `json:"serviceType,omitempty"`
 }
 
 // ExposedAppStatus defines the observed state of ExposedApp.
@@ -42,13 +44,18 @@ type ExposedAppStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	DeploymentName string `json:"deploymentName"`
-	ServiceName    string `json:"serviceName"`
-	LastUpdateBy   string `json:"lastUpdateBy"`
+	DeploymentName string `json:"deploymentName,omitempty"`
+	ServiceName    string `json:"serviceName,omitempty"`
+	LastUpdateBy   string `json:"lastUpdateBy,omitempty"`
+	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Deployment",type="string",JSONPath=".status.deploymentName"
+// +kubebuilder:printcolumn:name="Service",type="string",JSONPath=".status.serviceName"
+// +kubebuilder:printcolumn:name="Last Update By",type="string",JSONPath=".status.lastUpdateBy"
 
 // ExposedApp is the Schema for the exposedapps API.
 type ExposedApp struct {

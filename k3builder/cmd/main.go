@@ -183,9 +183,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	podName := os.Getenv("POD_NAME")
+	if len(podName) == 0 {
+		podName = "dummy"
+	}
+
 	if err = (&controller.ExposedAppReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("exposedapp-controller"),
+		PodName:  podName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExposedApp")
 		os.Exit(1)
