@@ -28,14 +28,23 @@ type ExposedAppSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of ExposedApp. Edit exposedapp_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Replicas      int    `json:"replicas"`
+	Image         string `json:"image"`
+	Protocol      string `json:"protocol"`
+	Port          int    `json:"port"`
+	ContainerPort int    `json:"containerPort"`
+	NodePort      int    `json:"nodePort"`
+	ServiceType   string `json:"serviceType"`
 }
 
 // ExposedAppStatus defines the observed state of ExposedApp.
 type ExposedAppStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	DeploymentName string `json:"deploymentName"`
+	ServiceName    string `json:"serviceName"`
+	LastUpdateBy   string `json:"lastUpdateBy"`
 }
 
 // +kubebuilder:object:root=true

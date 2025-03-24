@@ -39,13 +39,42 @@ spec:
           spec:
             description: ExposedAppSpec defines the desired state of ExposedApp.
             properties:
-              foo:
-                description: Foo is an example field of ExposedApp. Edit exposedapp_types.go
-                  to remove/update
+              containerPort:
+                type: integer
+              image:
                 type: string
+              nodePort:
+                type: integer
+              port:
+                type: integer
+              protocol:
+                type: string
+              replicas:
+                type: integer
+              serviceType:
+                type: string
+            required:
+            - containerPort
+            - image
+            - nodePort
+            - port
+            - protocol
+            - replicas
+            - serviceType
             type: object
           status:
             description: ExposedAppStatus defines the observed state of ExposedApp.
+            properties:
+              deploymentName:
+                type: string
+              lastUpdateBy:
+                type: string
+              serviceName:
+                type: string
+            required:
+            - deploymentName
+            - lastUpdateBy
+            - serviceName
             type: object
         type: object
     served: true

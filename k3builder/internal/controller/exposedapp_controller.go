@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,6 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	stablev1 "k3builder.com/exposedapp/api/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // ExposedAppReconciler reconciles a ExposedApp object
@@ -33,23 +37,41 @@ type ExposedAppReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const mainContainerName = "main"
+
 // +kubebuilder:rbac:groups=stable.k3builder.com,resources=exposedapps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=stable.k3builder.com,resources=exposedapps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=stable.k3builder.com,resources=exposedapps/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;update;delete;get
+// +kubebuilder:rbac:groups=core,resources=services,verbs=create;update;delete;get
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ExposedApp object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.2/pkg/reconcile
 func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	exposedApp := &stablev1.ExposedApp{}
+	namespace := req.NamespacedName.Namespace
+	err := r.Get(ctx, req.NamespacedName, exposedApp)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("ExposedApp resource not found, probably deleted.")
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	deploymentName := exposedApp.Status.DeploymentName
+
+	foundDeployment := &appsv1.Deployment{}
+	err = r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: namespace}, foundDeployment)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+
+		}
+	} else {
+		*foundDeployment.Spec.Replicas = int32(exposedApp.Spec.Replicas)
+		foundDeployment.Spec.Template.Spec.Containers[0].Image = exposedApp.Spec.Image
+		foundDeployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort = int32(exposedApp.Spec.ContainerPort)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -59,5 +81,7 @@ func (r *ExposedAppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&stablev1.ExposedApp{}).
 		Named("exposedapp").
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
