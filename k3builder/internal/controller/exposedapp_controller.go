@@ -190,7 +190,6 @@ func (r *ExposedAppReconciler) Service(exposedApp *stablev1.ExposedApp, podLabel
 }
 
 func (r *ExposedAppReconciler) Deployment(exposedApp *stablev1.ExposedApp, deploymentName string) (*appsv1.Deployment, error) {
-	replicas := exposedApp.Spec.Replicas
 	labels := map[string]string{"app.kubernetes.io/name": fmt.Sprintf("%s-%s", exposedApp.Name, exposedApp.Namespace)}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -198,7 +197,7 @@ func (r *ExposedAppReconciler) Deployment(exposedApp *stablev1.ExposedApp, deplo
 			Name:      deploymentName,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &exposedApp.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},

@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	stablev1 "k3builder.com/exposedapp/api/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -85,9 +86,8 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance ExposedApp")
-			propagation := metav1.DeletePropagationForeground
 			Expect(k8sClient.Delete(ctx, resource, &client.DeleteOptions{
-				PropagationPolicy: &propagation,
+				PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
 			})).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
@@ -122,6 +122,7 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(resource.Spec.Image))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(resource.Spec.ContainerPort))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
+			Expect(deployment.OwnerReferences[0].Name).To(Equal(resource.Name))
 		})
 		It("should successfully create service with proper parameters", func() {
 			By("Reconciling the created resource")
@@ -143,6 +144,7 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(service.Spec.Ports[0].Port).To(Equal(resource.Spec.Port))
 			Expect(service.Spec.Ports[0].NodePort).To(Equal(*resource.Spec.NodePort))
 			Expect(service.Spec.Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
+			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
 		})
 	})
 })
