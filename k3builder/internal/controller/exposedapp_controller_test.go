@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"k8s.io/client-go/tools/record"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	stablev1 "k3builder.com/exposedapp/api/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("ExposedApp Controller", func() {
@@ -38,7 +40,7 @@ var _ = Describe("ExposedApp Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		exposedapp := &stablev1.ExposedApp{}
 
@@ -46,39 +48,55 @@ var _ = Describe("ExposedApp Controller", func() {
 			By("creating the custom resource for the Kind ExposedApp")
 			err := k8sClient.Get(ctx, typeNamespacedName, exposedapp)
 			if err != nil && errors.IsNotFound(err) {
+				var nodePort int32
+				nodePort = 30000
 				resource := &stablev1.ExposedApp{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: stablev1.ExposedAppSpec{
+						Replicas:      2,
+						Image:         "nginx:latest",
+						Protocol:      "TCP",
+						Port:          1234,
+						ContainerPort: 80,
+						NodePort:      &nodePort,
+						ServiceType:   "NodePort",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &stablev1.ExposedApp{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance ExposedApp")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			propagation := metav1.DeletePropagationForeground
+			Expect(k8sClient.Delete(ctx, resource, &client.DeleteOptions{
+				PropagationPolicy: &propagation,
+			})).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ExposedAppReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			resource := &stablev1.ExposedApp{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Status.DeploymentName).To(Equal("test-resource-default-deployment"))
+			Expect(resource.Status.ServiceName).To(Equal("test-resource-default-service"))
 		})
 	})
 })
