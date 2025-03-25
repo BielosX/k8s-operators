@@ -173,15 +173,15 @@ var _ = Describe("ExposedApp Controller", func() {
 			err = k8sClient.Delete(ctx, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			Eventually(func() {
+			Eventually(func(g Gomega) {
 				service := &corev1.Service{}
 				err := k8sClient.Get(ctx, serviceNamespacedName, service)
-				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}, 20*time.Second)
-			Eventually(func() {
+			Eventually(func(g Gomega) {
 				deployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, deploymentNamespaceName, deployment)
-				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}, 20*time.Second)
 		})
 	})
