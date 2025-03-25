@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	stablev1 "k3builder.com/exposedapp/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -145,6 +147,42 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(service.Spec.Ports[0].NodePort).To(Equal(*resource.Spec.NodePort))
 			Expect(service.Spec.Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
 			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
+		})
+		It("should remove deployment and service on ExposedApp removal", func() {
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			resource := &stablev1.ExposedApp{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			service := &corev1.Service{}
+			serviceNamespacedName := types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.ServiceName,
+			}
+			err = k8sClient.Get(ctx, serviceNamespacedName, service)
+			deployment := &appsv1.Deployment{}
+			deploymentNamespaceName := types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.DeploymentName,
+			}
+			err = k8sClient.Get(ctx, deploymentNamespaceName, deployment)
+
+			err = k8sClient.Delete(ctx, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() {
+				service := &corev1.Service{}
+				err := k8sClient.Get(ctx, serviceNamespacedName, service)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, 20*time.Second)
+			Eventually(func() {
+				deployment := &appsv1.Deployment{}
+				err := k8sClient.Get(ctx, deploymentNamespaceName, deployment)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}, 20*time.Second)
 		})
 	})
 })
