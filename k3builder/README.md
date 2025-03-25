@@ -1,8 +1,9 @@
 # k3builder
-// TODO(user): Add simple overview of use/purpose
+Kubernetes operator that simplifies Deployment and Service creation by composing these into a single ExposedApp object.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Instead of creating Deployment and Service separately with required boilerplate
+for selectors (and other stuff) just create single ExposedApp.
 
 ## Getting Started
 
@@ -119,7 +120,7 @@ previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml
 is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+You can fork this project and do whatever you want. Enjoy.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
