@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/client-go/tools/record"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -44,6 +45,8 @@ var _ = Describe("ExposedApp Controller", func() {
 		}
 		exposedapp := &stablev1.ExposedApp{}
 
+		var controllerReconciler ExposedAppReconciler
+
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind ExposedApp")
 			err := k8sClient.Get(ctx, typeNamespacedName, exposedapp)
@@ -67,6 +70,12 @@ var _ = Describe("ExposedApp Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
+			By("creating ExposedAppReconciler")
+			controllerReconciler = ExposedAppReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
 		})
 
 		AfterEach(func() {
@@ -82,12 +91,6 @@ var _ = Describe("ExposedApp Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &ExposedAppReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
-			}
-
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
@@ -97,6 +100,25 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.DeploymentName).To(Equal("test-resource-default-deployment"))
 			Expect(resource.Status.ServiceName).To(Equal("test-resource-default-service"))
+		})
+		It("should successfully create deployment with proper parameters", func() {
+			By("Reconciling the created resource")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			resource := &stablev1.ExposedApp{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			deployment := &appsv1.Deployment{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.DeploymentName,
+			}, deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*deployment.Spec.Replicas).To(Equal(resource.Spec.Replicas))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(resource.Spec.Image))
 		})
 	})
 })
