@@ -3,6 +3,17 @@ use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct OwnerReference {
+    pub api_version: String,
+    pub kind: String,
+    pub name: String,
+    pub uid: String,
+    pub block_owner_deletion: bool,
+    pub controller: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub labels: Option<HashMap<String, String>>,
     pub annotations: Option<HashMap<String, String>>,
@@ -10,7 +21,9 @@ pub struct Metadata {
     pub finalizers: Option<Vec<String>>,
     pub deletion_timestamp: Option<String>,
     pub name: Option<String>,
+    pub uid: Option<String>,
     pub namespace: Option<String>,
+    pub owner_references: Option<Vec<OwnerReference>>,
 }
 
 impl Default for Metadata {
@@ -23,6 +36,8 @@ impl Default for Metadata {
             deletion_timestamp: None,
             name: None,
             namespace: None,
+            owner_references: None,
+            uid: None,
         }
     }
 }

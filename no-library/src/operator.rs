@@ -24,7 +24,7 @@ pub mod operator {
         leader_elector.elect_leader().await;
     }
 
-    pub async fn handle_custom_resources(mut receiver: Receiver<()>) {
+    pub async fn handle_owned_resources(mut receiver: Receiver<()>) {
         receiver.recv().await;
         info!("Starting doing operator stuff");
         let mut client = K8sClient::new().await;

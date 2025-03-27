@@ -8,7 +8,7 @@ use crate::operator::operator::elect_leader;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
-use operator::operator::handle_custom_resources;
+use operator::operator::handle_owned_resources;
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -39,7 +39,7 @@ async fn main() {
         .unwrap();
     select! {
         _ = tokio::spawn(elect_leader(pod_name, Arc::clone(&is_leader_elected), sender)) => {}
-        _ = tokio::spawn(handle_custom_resources(receiver)) => {}
+        _ = tokio::spawn(handle_owned_resources(receiver)) => {}
         _ = axum::serve(listener, app) => {}
     }
 }
