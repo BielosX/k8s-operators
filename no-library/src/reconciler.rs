@@ -1,10 +1,10 @@
-use crate::k8s_client::client::{K8sClient, K8sClientError};
+use crate::k8s_client::client::K8sClient;
 use crate::k8s_types::{
-    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, K8sObject, Metadata,
-    OwnerReference, PodSpec, PodTemplate, Selector, Service, ServicePort, ServiceSpec,
+    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, K8sObject,
+    Metadata, OwnerReference, PodSpec, PodTemplate, Selector, Service, ServicePort, ServiceSpec,
 };
 use std::collections::HashMap;
-use tracing::{error, info};
+use tracing::info;
 
 pub struct Reconciler {
     client: K8sClient,
@@ -26,7 +26,7 @@ impl Reconciler {
         }
     }
 
-    pub async fn reconcile(&mut self, resource: &K8sObject<ExposedApp>) {
+    pub async fn reconcile(&mut self, resource: &K8sObject<ExposedApp>) -> Result<(), String> {
         let name = resource.metadata.name.clone().unwrap();
         let namespace = resource.metadata.namespace.clone().unwrap();
         info!("Synchronizing resource {} namespace {}", name, namespace,);
@@ -62,27 +62,21 @@ impl Reconciler {
                             containers: vec![Container {
                                 name: String::from("main"),
                                 image: resource.object.spec.image.clone(),
-                                ports: vec![ContainerPort {
+                                ports: Some(vec![ContainerPort {
                                     container_port: resource.object.spec.container_port,
-                                }],
+                                }]),
                             }],
                         },
                     },
                 },
             },
         };
-        let post_deployment_result = self.client.post_deployment(&deployment).await;
-        match post_deployment_result {
-            Ok(_) => {}
-            Err(K8sClientError::Conflict) => {
-                info!(
-                    "Deployment {} already exists, updating",
-                    deployment_name.clone()
-                );
-                self.client.put_deployment(&deployment).await.unwrap();
+        match self.client.save_deployment(&deployment).await {
+            Ok(_) => {
+                info!("Deployment created/updated");
             }
             Err(e) => {
-                error!("Error occurred while creating a deployment: {:?}", e);
+                return Err(format!("Error occurred while saving a deployment: {:?}", e));
             }
         }
         let service_name = format!("{}-service", name);
@@ -91,14 +85,14 @@ impl Reconciler {
             kind: String::from("Service"),
             metadata: Metadata {
                 name: Some(service_name),
-                namespace: Some(namespace),
+                namespace: Some(namespace.clone()),
                 owner_references: Some(vec![Self::create_owner_reference(resource)]),
                 ..Metadata::default()
             },
             object: Service {
                 spec: ServiceSpec {
                     service_type: resource.object.spec.service_type.clone(),
-                    selector: pod_labels,
+                    selector: Some(pod_labels),
                     ports: vec![ServicePort {
                         protocol: resource.object.spec.protocol.clone(),
                         port: resource.object.spec.port,
@@ -114,8 +108,9 @@ impl Reconciler {
                 info!("Service created/updated");
             }
             Err(e) => {
-                error!("Error occurred while creating a service: {:?}", e);
+                return Err(format!("Error occurred while creating a service: {:?}", e));
             }
         }
+        Ok(())
     }
 }

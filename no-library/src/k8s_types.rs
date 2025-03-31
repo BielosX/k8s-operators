@@ -74,6 +74,14 @@ pub struct K8sObject<T> {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct K8sListObject<T> {
+    pub metadata: Metadata,
+    #[serde(flatten)]
+    pub object: T,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ExposedApp {
     pub spec: ExposedAppSpec,
 }
@@ -130,7 +138,7 @@ pub struct ContainerPort {
 pub struct Container {
     pub name: String,
     pub image: String,
-    pub ports: Vec<ContainerPort>,
+    pub ports: Option<Vec<ContainerPort>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -142,7 +150,7 @@ pub struct Service {
 pub struct ServiceSpec {
     #[serde(rename = "type")]
     pub service_type: Option<String>,
-    pub selector: HashMap<String, String>,
+    pub selector: Option<HashMap<String, String>>,
     pub ports: Vec<ServicePort>,
 }
 

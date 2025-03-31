@@ -19,6 +19,8 @@ rules:
       - "update"
       - "delete"
       - "get"
+      - "list"
+      - "watch"
     apiGroups:
       - "apps"
     resources:
@@ -28,6 +30,8 @@ rules:
       - "update"
       - "delete"
       - "get"
+      - "list"
+      - "watch"
     apiGroups: [""]
     resources:
       - "services"

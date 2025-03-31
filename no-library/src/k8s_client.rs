@@ -1,6 +1,9 @@
 pub mod client {
     use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
-    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, Lease, List, Service, Watch};
+    use crate::k8s_types::{
+        Deployment, ExposedApp, K8sListObject, K8sObject, Lease, List, Service,
+        Watch,
+    };
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
@@ -20,7 +23,7 @@ pub mod client {
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
-    const EXPOSED_APPS_LIST: &str = "/apis/stable.no-library.com/v1/exposedapps";
+    const EXPOSED_APPS_LIST: &str = "apis/stable.no-library.com/v1/exposedapps";
 
     async fn get_token() -> String {
         let content = fs::read(format!("{}/token", SERVICE_ACCOUNT_PATH))
@@ -96,10 +99,31 @@ pub mod client {
             let result = self
                 .send_with_retry(
                     self.client
-                        .get(format!("{}{}", API_SERVER, EXPOSED_APPS_LIST)),
+                        .get(format!("{}/{}", API_SERVER, EXPOSED_APPS_LIST)),
                 )
                 .await;
             from_str::<List<K8sObject<ExposedApp>>>(result.text().await.unwrap().as_str()).unwrap()
+        }
+
+        pub async fn get_exposed_app(
+            &mut self,
+            name: &str,
+            namespace: &str,
+        ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
+            let response = self
+                .send_with_retry(self.client.get(format!(
+                    "{}/apis/stable.no-library.com/v1/namespaces/{}/exposedapps/{}",
+                    API_SERVER, namespace, name
+                )))
+                .await;
+            let status = response.status();
+            let text = response.text().await.unwrap();
+            K8sClientError::from_status(status)
+                .map(Err)
+                .unwrap_or_else(|| {
+                    let object = from_str::<K8sObject<ExposedApp>>(text.as_str()).unwrap();
+                    Ok(object)
+                })
         }
 
         /*
@@ -198,23 +222,6 @@ pub mod client {
                 })
         }
 
-        pub async fn put_exposed_app(
-            &mut self,
-            apps: &K8sObject<ExposedApp>,
-        ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
-            let name = apps.metadata.name.clone().unwrap();
-            let namespace = apps.metadata.namespace.clone().unwrap();
-            self.put(
-                apps,
-                namespace.as_str(),
-                "exposedapps",
-                "stable.no-library.com",
-                "v1",
-                name.as_str(),
-            )
-            .await
-        }
-
         pub async fn put_deployment(
             &mut self,
             deployment: &K8sObject<Deployment>,
@@ -230,6 +237,25 @@ pub mod client {
                 name.as_str(),
             )
             .await
+        }
+
+        // Create or Update
+        pub async fn save_deployment(
+            &mut self,
+            deployment: &K8sObject<Deployment>,
+        ) -> Result<K8sObject<Deployment>, K8sClientError> {
+            let result = self.post_deployment(deployment).await;
+            match result {
+                Ok(_) => result,
+                Err(Conflict) => {
+                    info!(
+                        "Deployment {} already exists, updating",
+                        deployment.metadata.name.clone().unwrap()
+                    );
+                    self.put_deployment(deployment).await
+                }
+                Err(e) => Err(e),
+            }
         }
 
         pub async fn put_service(
@@ -254,49 +280,51 @@ pub mod client {
                 .await
         }
 
-        pub async fn delete(
+        pub async fn watch<T: DeserializeOwned>(
             &mut self,
-            namespace: &str,
-            resource_type: &str,
-            group: &str,
-            version: &str,
-            name: &str,
-        ) -> Result<(), K8sClientError> {
-            let uri = format!(
-                "/apis/{}{}/namespaces/{}/{}/{}",
-                group, version, namespace, resource_type, name
-            );
-            self.delete_uri(uri.as_str()).await
-        }
-
-        pub async fn delete_uri(&mut self, uri: &str) -> Result<(), K8sClientError> {
-            let url = format!("{}{}", API_SERVER, uri);
-            let response = self.send_with_retry(self.client.delete(url)).await;
-            K8sClientError::from_status(response.status())
-                .map(Err)
-                .unwrap_or(Ok(()))
-        }
-
-        pub async fn watch_exposed_apps(
-            &mut self,
+            uri: &str,
             resource_version: &str,
-        ) -> impl Stream<Item = Watch<K8sObject<ExposedApp>>> {
+        ) -> impl Stream<Item = Watch<K8sListObject<T>>> {
             let mut response = self
                 .send_with_retry(self.client.get(format!(
-                    "{}{}?watch=1&resourceVersion={}",
-                    API_SERVER, EXPOSED_APPS_LIST, resource_version
+                    "{}/{}?watch=1&resourceVersion={}",
+                    API_SERVER, uri, resource_version
                 )))
                 .await;
             stream! {
                 loop {
                     if let Some(chunk) = response.chunk().await.unwrap() {
-                        let event = from_str::<Watch<K8sObject<ExposedApp>>>(from_utf8(chunk.as_ref()).unwrap()).unwrap();
+                        let event = from_str::<Watch<K8sListObject<T>>>(from_utf8(chunk.as_ref()).unwrap()).unwrap();
                         yield event;
                     } else {
                         break;
                     }
                 }
             }
+        }
+
+        pub async fn watch_exposed_apps(
+            &mut self,
+            resource_version: &str,
+        ) -> impl Stream<Item = Watch<K8sListObject<ExposedApp>>> {
+            self.watch(EXPOSED_APPS_LIST, resource_version).await
+        }
+
+        pub async fn get_all<T: DeserializeOwned>(
+            &mut self,
+            uri: &str,
+        ) -> Result<List<K8sListObject<T>>, K8sClientError> {
+            let response = self
+                .send_with_retry(self.client.get(format!("{}/{}", API_SERVER, uri)))
+                .await;
+            let status = response.status();
+            let text = response.text().await.unwrap();
+            K8sClientError::from_status(status)
+                .map(Err)
+                .unwrap_or_else(|| {
+                    let object = from_str::<List<K8sListObject<T>>>(text.as_str()).unwrap();
+                    Ok(object)
+                })
         }
 
         pub async fn get_lease(
