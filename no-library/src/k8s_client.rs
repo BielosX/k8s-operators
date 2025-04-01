@@ -1,8 +1,7 @@
 pub mod client {
     use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
     use crate::k8s_types::{
-        Deployment, ExposedApp, K8sListObject, K8sObject, Lease, List, Service,
-        Watch,
+        Deployment, ExposedApp, K8sListObject, K8sObject, Lease, List, Service, Watch,
     };
     use async_stream::stream;
     use futures::Stream;
@@ -88,10 +87,11 @@ pub mod client {
             }
         }
 
-        fn get_auth_header(&self) -> HeaderMap {
+        fn get_headers(&self) -> HeaderMap {
             let mut headers = HeaderMap::new();
             let value = HeaderValue::from_str(format!("Bearer {}", self.token).as_str()).unwrap();
             headers.insert("Authorization", value);
+            headers.insert("User-Agent", HeaderValue::from_str("exposed-apps-controller").unwrap());
             headers
         }
 
@@ -181,7 +181,7 @@ pub mod client {
             let mut result = builder
                 .try_clone()
                 .unwrap()
-                .headers(self.get_auth_header())
+                .headers(self.get_headers())
                 .send()
                 .await
                 .unwrap();
@@ -194,7 +194,7 @@ pub mod client {
                 let response = builder
                     .try_clone()
                     .unwrap()
-                    .headers(self.get_auth_header())
+                    .headers(self.get_headers())
                     .send()
                     .await
                     .unwrap();
@@ -294,7 +294,8 @@ pub mod client {
             stream! {
                 loop {
                     if let Some(chunk) = response.chunk().await.unwrap() {
-                        let event = from_str::<Watch<K8sListObject<T>>>(from_utf8(chunk.as_ref()).unwrap()).unwrap();
+                        let payload = from_utf8(chunk.as_ref()).unwrap();
+                        let event = from_str::<Watch<K8sListObject<T>>>(payload).unwrap();
                         yield event;
                     } else {
                         break;

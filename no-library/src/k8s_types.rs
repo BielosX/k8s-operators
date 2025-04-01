@@ -14,6 +14,12 @@ pub struct OwnerReference {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ManageFields {
+    pub manager: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub labels: Option<HashMap<String, String>>,
     pub annotations: Option<HashMap<String, String>>,
@@ -24,6 +30,7 @@ pub struct Metadata {
     pub uid: Option<String>,
     pub namespace: Option<String>,
     pub owner_references: Option<Vec<OwnerReference>>,
+    pub managed_fields: Option<Vec<ManageFields>>,
 }
 
 impl Default for Metadata {
@@ -38,6 +45,7 @@ impl Default for Metadata {
             namespace: None,
             owner_references: None,
             uid: None,
+            managed_fields: None,
         }
     }
 }

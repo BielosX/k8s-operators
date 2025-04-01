@@ -1,9 +1,7 @@
 pub mod operator {
-    use std::collections::HashMap;
+    use crate::cache::{clone_cache, new_cache, Cache, NamespacedName};
     use crate::k8s_client::client::{K8sClient, K8sClientError};
-    use crate::k8s_types::{
-        Deployment, ExposedApp, K8sListObject, K8sObject, List, Service,
-    };
+    use crate::k8s_types::{Deployment, ExposedApp, K8sListObject, K8sObject, List, Service};
     use crate::leader_election::LeaderElector;
     use crate::reconciler::Reconciler;
     use futures::{pin_mut, StreamExt};
@@ -21,6 +19,7 @@ pub mod operator {
 
     const ALL_DEPLOYMENTS_LIST: &str = "apis/apps/v1/deployments";
     const ALL_SERVICES_LIST: &str = "api/v1/services";
+    const KUBE_CONTROLLER_MANAGER: &str = "kube-controller-manager";
 
     pub async fn elect_leader(
         pod_id: String,
@@ -43,11 +42,12 @@ pub mod operator {
             Sender<K8sObject<ExposedApp>>,
             Receiver<K8sObject<ExposedApp>>,
         ) = mpsc::channel(64);
+        let cache = new_cache();
         select! {
-            _ = tokio::spawn(handle_reconcile_requests(app_receiver)) => {}
-            _ = tokio::spawn(handle_exposed_apps(app_sender.clone())) => {}
-            _ = tokio::spawn(handle_owned_update::<Deployment>(app_sender.clone(), ALL_DEPLOYMENTS_LIST)) => {}
-            _ = tokio::spawn(handle_owned_update::<Service>(app_sender.clone(), ALL_SERVICES_LIST)) => {}
+            _ = tokio::spawn(handle_reconcile_requests(app_receiver, clone_cache(&cache))) => {}
+            _ = tokio::spawn(handle_exposed_apps(app_sender.clone(), clone_cache(&cache))) => {}
+            _ = tokio::spawn(handle_owned_update::<Deployment>(app_sender.clone(), ALL_DEPLOYMENTS_LIST, clone_cache(&cache))) => {}
+            _ = tokio::spawn(handle_owned_update::<Service>(app_sender.clone(), ALL_SERVICES_LIST, clone_cache(&cache))) => {}
         }
     }
 
@@ -62,13 +62,7 @@ pub mod operator {
         }
     }
 
-    #[derive(Eq, PartialEq, Hash)]
-    struct NamespacedName {
-        pub namespace: String,
-        pub name: String,
-    }
-
-    async fn handle_exposed_apps(sender: Sender<K8sObject<ExposedApp>>) {
+    async fn handle_exposed_apps(sender: Sender<K8sObject<ExposedApp>>, cache: Cache) {
         let mut client = K8sClient::new().await;
         loop {
             info!("Watching ExposedApp");
@@ -79,8 +73,23 @@ pub mod operator {
             }
             let stream = client.watch_exposed_apps(resource_version.as_str()).await;
             pin_mut!(stream);
-            while let Some(event) = stream.next().await {
+            'events: while let Some(event) = stream.next().await {
                 info!("Received ExposedApp {:?} event", event.event_type);
+                let name = event.object.metadata.name.clone().unwrap();
+                let namespace = event.object.metadata.namespace.clone().unwrap();
+                let namespaced_name = NamespacedName::new(name.as_str(), namespace.as_str());
+                let resource_version = event.object.metadata.resource_version.clone().unwrap();
+                let map = cache.lock().await;
+                if let Some(value) = map.get(&namespaced_name) {
+                    if resource_version == *value {
+                        info!(
+                            "ExposedApp {} version {} already handled",
+                            name, resource_version
+                        );
+                        continue 'events;
+                    }
+                }
+                info!("Sending reconcile event for {}", name);
                 sender
                     .send(K8sObject {
                         api_version: String::from("stable.no-library.com/v1"),
@@ -98,6 +107,7 @@ pub mod operator {
     async fn handle_owned_update<T: DeserializeOwned>(
         sender: Sender<K8sObject<ExposedApp>>,
         uri: &str,
+        cache: Cache,
     ) {
         let mut client = K8sClient::new().await;
         loop {
@@ -106,14 +116,39 @@ pub mod operator {
             let resource_version = get_result.metadata.resource_version.clone().unwrap();
             let stream = client.watch::<T>(uri, resource_version.as_str()).await;
             pin_mut!(stream);
-            while let Some(event) = stream.next().await {
+            'events: while let Some(event) = stream.next().await {
+                let object_name = event.object.metadata.name.unwrap();
+                let version = event.object.metadata.resource_version.clone().unwrap();
+                info!("Received {:?} event for {}, version {}", event.event_type, object_name, version);
+                let last_manager = event.object.metadata.managed_fields
+                    .and_then(|fields| fields.last().cloned())
+                    .map(|fields| fields.manager);
+                if let Some(manager) = last_manager {
+                    if manager == KUBE_CONTROLLER_MANAGER {
+                        info!("Last update by {}, that's fine. Skip", KUBE_CONTROLLER_MANAGER);
+                        continue 'events;
+                    } else {
+                        info!("Last update by {}, should reconcile", manager);
+                    }
+                }
+                let namespace = event.object.metadata.namespace.unwrap();
+                let namespaced_name = NamespacedName::new(object_name.as_str(), namespace.as_str());
+                let map = cache.lock().await;
+                if let Some(value) = map.get(&namespaced_name) {
+                    if version == *value {
+                        info!("Object {} version {} already handled", object_name, version);
+                        continue 'events;
+                    }
+                } else {
+                    info!("No {} in cache, skip", object_name);
+                    continue 'events;
+                }
+                info!("Looking for owner references for {}", object_name);
                 if let Some(references) = event.object.metadata.owner_references {
                     if let Some(exposed_app_ref) =
                         references.iter().find(|&item| item.kind == "ExposedApp")
                     {
                         let owner_name = exposed_app_ref.name.clone();
-                        let object_name = event.object.metadata.name.unwrap();
-                        let namespace = event.object.metadata.namespace.unwrap();
                         info!(
                             "Found ExposedApp owner {} for object {}",
                             owner_name, object_name
@@ -140,26 +175,13 @@ pub mod operator {
         }
     }
 
-    fn handle_reconcile_error(delay: &mut Duration,
-                              queue: &mut DelayQueue<QueueEntry>, exposed_app: &K8sObject<ExposedApp>,
-                              err: String) {
-        error!(err);
-        if delay.is_zero() {
-            *delay = Duration::from_secs(2);
-        } else {
-            if *delay < Duration::from_secs(128) {
-                *delay = delay.mul(2);
-            }
-        }
-        queue.insert(QueueEntry::new(exposed_app.clone(), *delay), *delay);
-    }
-
-    async fn handle_reconcile_requests(mut receiver: Receiver<K8sObject<ExposedApp>>) {
-        let mut reconciler = Reconciler::new(K8sClient::new().await);
+    async fn handle_reconcile_requests(
+        mut receiver: Receiver<K8sObject<ExposedApp>>,
+        cache: Cache,
+    ) {
+        let mut reconciler = Reconciler::new(K8sClient::new().await, cache);
         let mut queue: DelayQueue<QueueEntry> = DelayQueue::with_capacity(32);
-        let mut cached_versions: HashMap<NamespacedName, String> = HashMap::new();
         loop {
-            cached_versions.clear();
             for _ in 0..10 {
                 if let Ok(entry) = receiver.try_recv() {
                     let delay = Duration::from_secs(0);
@@ -173,36 +195,21 @@ pub mod operator {
                 let mut delay = expired.get_ref().delay.clone();
                 let exposed_app = expired.get_ref().entry.clone();
                 let name = exposed_app.metadata.name.clone().unwrap();
-                let namespace = exposed_app.metadata.namespace.clone().unwrap();
-                let namespaced_name = NamespacedName {
-                    name,
-                    namespace,
-                };
-                let resource_version = exposed_app.metadata.resource_version.clone().unwrap();
-                info!("ExposedApp {} ready to reconcile", exposed_app.metadata.name.clone().unwrap());
-                if let Some(version) = cached_versions.get_mut(&namespaced_name) {
-                    if resource_version == *version {
-                        info!("The same version received. Skip");
-                    } else {
-                        info!("Different version in cache. Reconcile");
-                        match reconciler.reconcile(&exposed_app).await {
-                            Ok(_) => {
-                                *version = resource_version;
-                            }
-                            Err(err) => {
-                                handle_reconcile_error(&mut delay, &mut queue, &exposed_app, err);
-                            }
-                        }
+                info!("ExposedApp {} ready to reconcile", name);
+                match reconciler.reconcile(&exposed_app).await {
+                    Ok(_) => {
+                        info!("ExposedApp {} successfully reconciled", name);
                     }
-                } else {
-                    info!("No version in cache. Reconcile");
-                    match reconciler.reconcile(&exposed_app).await {
-                        Ok(_) => {
-                            cached_versions.insert(namespaced_name, resource_version);
+                    Err(err) => {
+                        error!(err);
+                        if delay.is_zero() {
+                            delay = Duration::from_secs(2);
+                        } else {
+                            if delay < Duration::from_secs(128) {
+                                delay = delay.mul(2);
+                            }
                         }
-                        Err(err) => {
-                            handle_reconcile_error(&mut delay, &mut queue, &exposed_app, err);
-                        }
+                        queue.insert(QueueEntry::new(exposed_app.clone(), delay), delay);
                     }
                 }
             }

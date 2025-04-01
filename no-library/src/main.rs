@@ -1,3 +1,4 @@
+mod cache;
 mod k8s_client;
 mod k8s_types;
 mod leader_election;
