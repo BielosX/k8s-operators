@@ -119,13 +119,22 @@ pub mod operator {
             'events: while let Some(event) = stream.next().await {
                 let object_name = event.object.metadata.name.unwrap();
                 let version = event.object.metadata.resource_version.clone().unwrap();
-                info!("Received {:?} event for {}, version {}", event.event_type, object_name, version);
-                let last_manager = event.object.metadata.managed_fields
+                info!(
+                    "Received {:?} event for {}, version {}",
+                    event.event_type, object_name, version
+                );
+                let last_manager = event
+                    .object
+                    .metadata
+                    .managed_fields
                     .and_then(|fields| fields.last().cloned())
                     .map(|fields| fields.manager);
                 if let Some(manager) = last_manager {
                     if manager == KUBE_CONTROLLER_MANAGER {
-                        info!("Last update by {}, that's fine. Skip", KUBE_CONTROLLER_MANAGER);
+                        info!(
+                            "Last update by {}, that's fine. Skip",
+                            KUBE_CONTROLLER_MANAGER
+                        );
                         continue 'events;
                     } else {
                         info!("Last update by {}, should reconcile", manager);
@@ -193,10 +202,10 @@ pub mod operator {
             }
             while let Some(expired) = queue.next().await {
                 let mut delay = expired.get_ref().delay.clone();
-                let exposed_app = expired.get_ref().entry.clone();
+                let mut exposed_app = expired.get_ref().entry.clone();
                 let name = exposed_app.metadata.name.clone().unwrap();
                 info!("ExposedApp {} ready to reconcile", name);
-                match reconciler.reconcile(&exposed_app).await {
+                match reconciler.reconcile(&mut exposed_app).await {
                     Ok(_) => {
                         info!("ExposedApp {} successfully reconciled", name);
                     }

@@ -90,8 +90,16 @@ pub struct K8sListObject<T> {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ExposedAppStatus {
+    pub deployment_name: String,
+    pub service_name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ExposedApp {
     pub spec: ExposedAppSpec,
+    pub status: Option<ExposedAppStatus>,
 }
 
 #[derive(Serialize, Deserialize)]

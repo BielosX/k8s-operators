@@ -91,7 +91,10 @@ pub mod client {
             let mut headers = HeaderMap::new();
             let value = HeaderValue::from_str(format!("Bearer {}", self.token).as_str()).unwrap();
             headers.insert("Authorization", value);
-            headers.insert("User-Agent", HeaderValue::from_str("exposed-apps-controller").unwrap());
+            headers.insert(
+                "User-Agent",
+                HeaderValue::from_str("exposed-apps-controller").unwrap(),
+            );
             headers
         }
 
@@ -205,11 +208,11 @@ pub mod client {
             result
         }
 
-        async fn execute<T: Serialize + DeserializeOwned>(
+        async fn execute<I: Serialize, O: DeserializeOwned>(
             &mut self,
             builder: RequestBuilder,
-            item: &K8sObject<T>,
-        ) -> Result<K8sObject<T>, K8sClientError> {
+            item: &I,
+        ) -> Result<O, K8sClientError> {
             let payload = to_string(&item).unwrap();
             let result = self.send_with_retry(builder.body(payload)).await;
             let status = result.status();
@@ -217,7 +220,7 @@ pub mod client {
             K8sClientError::from_status(status)
                 .map(Err)
                 .unwrap_or_else(|| {
-                    let object = from_str::<K8sObject<T>>(text.as_str()).unwrap();
+                    let object = from_str::<O>(text.as_str()).unwrap();
                     Ok(object)
                 })
         }
@@ -346,6 +349,19 @@ pub mod client {
                     let lease = from_str::<K8sObject<Lease>>(text.as_str()).unwrap();
                     Ok(lease)
                 })
+        }
+
+        pub async fn put_exposed_app_status(
+            &mut self,
+            namespace: &str,
+            name: &str,
+            app: &K8sObject<ExposedApp>,
+        ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
+            let url = format!(
+                "{}/apis/stable.no-library.com/v1/namespaces/{}/exposedapps/{}/status",
+                API_SERVER, namespace, name
+            );
+            self.execute(self.client.put(url), app).await
         }
 
         pub async fn patch_lease(

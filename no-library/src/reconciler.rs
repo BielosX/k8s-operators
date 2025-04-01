@@ -1,8 +1,8 @@
 use crate::cache::{Cache, NamespacedName};
 use crate::k8s_client::client::K8sClient;
 use crate::k8s_types::{
-    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, K8sObject, Metadata,
-    OwnerReference, PodSpec, PodTemplate, Selector, Service, ServicePort, ServiceSpec,
+    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, ExposedAppStatus, K8sObject,
+    Metadata, OwnerReference, PodSpec, PodTemplate, Selector, Service, ServicePort, ServiceSpec,
 };
 use std::collections::HashMap;
 use tracing::info;
@@ -129,7 +129,7 @@ impl Reconciler {
         }
     }
 
-    pub async fn reconcile(&mut self, resource: &K8sObject<ExposedApp>) -> Result<(), String> {
+    pub async fn reconcile(&mut self, resource: &mut K8sObject<ExposedApp>) -> Result<(), String> {
         let name = resource.metadata.name.clone().unwrap();
         let namespace = resource.metadata.namespace.clone().unwrap();
         info!("Synchronizing resource {} namespace {}", name, namespace);
@@ -162,6 +162,31 @@ impl Reconciler {
         {
             Ok(_) => {}
             Err(e) => return Err(e),
+        }
+        resource.object.status = Some(ExposedAppStatus {
+            deployment_name,
+            service_name,
+        });
+        let mut map = self.cache.lock().await;
+        match self
+            .client
+            .put_exposed_app_status(namespace.as_str(), name.as_str(), &resource)
+            .await
+        {
+            Ok(result) => {
+                info!("Successfully updated status of {}", name);
+                let namespaced_name = NamespacedName::new(name.as_str(), namespace.as_str());
+                map.insert(
+                    namespaced_name,
+                    result.metadata.resource_version.clone().unwrap(),
+                );
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Error occurred while updating ExposedApp status: {:?}",
+                    e
+                ));
+            }
         }
         Ok(())
     }
