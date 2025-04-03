@@ -246,4 +246,3 @@ impl<T> Into<ObjectReference> for K8sObject<T> {
         }
     }
 }
-

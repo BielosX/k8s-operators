@@ -1,8 +1,6 @@
-use crate::k8s_client::client::{K8sClient, K8sClientError};
+use crate::k8s_client::client::K8sClient;
 use crate::offset_date_time_parser::parse;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -13,65 +11,42 @@ const LEASE_NAMESPACE: &str = "no-library";
 pub struct LeaderElector {
     client: K8sClient,
     pod_id: String,
-    is_leader_elected: Arc<AtomicBool>,
     is_leader_sender: Sender<()>,
 }
 
 impl LeaderElector {
-    pub fn new(
-        client: K8sClient,
-        pod_id: &str,
-        is_leader_elected: Arc<AtomicBool>,
-        is_leader_sender: Sender<()>,
-    ) -> Self {
+    pub fn new(client: K8sClient, pod_id: &str, is_leader_sender: Sender<()>) -> Self {
         LeaderElector {
             client,
             pod_id: String::from(pod_id),
-            is_leader_elected,
             is_leader_sender,
         }
     }
 
-    pub async fn elect_leader(&mut self) {
-        let mut is_leader = false;
+    async fn acquire_lease(&mut self) {
         loop {
             let lease = self
                 .client
-                .get_lease(LEASE_NAMESPACE, LEASE_NAME)
+                .get_lease(LEASE_NAME, LEASE_NAMESPACE)
                 .await
-                .expect("Lease should be there, better check yaml config");
+                .unwrap();
             let duration = lease.object.spec.lease_duration_seconds;
-            let seconds = duration >> 1;
             let now = OffsetDateTime::now_utc();
             let resource_version = lease.metadata.resource_version.clone().unwrap();
             let can_acquire = lease
                 .object
                 .spec
                 .acquire_time
-                .clone()
                 .map(|t| {
-                    let date = parse(t.as_str()).unwrap();
-                    now > date
-                        .checked_add(time::Duration::seconds(duration as i64))
+                    now > parse(t.as_str())
+                        .unwrap()
+                        .checked_add(Duration::seconds(duration as i64))
                         .unwrap()
                 })
                 .unwrap_or(true);
-            if is_leader {
-                info!("Refreshing lease");
-                self.client
-                    .patch_lease(
-                        LEASE_NAMESPACE,
-                        LEASE_NAME,
-                        resource_version.as_str(),
-                        self.pod_id.as_str(),
-                        now,
-                    )
-                    .await
-                    .unwrap();
-                self.is_leader_elected.store(true, Ordering::SeqCst);
-            } else if can_acquire {
-                info!("Trying to acquire the lease");
-                let acquire_result = self
+            if can_acquire {
+                info!("Trying to acquire lease {}", LEASE_NAME);
+                match self
                     .client
                     .patch_lease(
                         LEASE_NAMESPACE,
@@ -80,32 +55,60 @@ impl LeaderElector {
                         self.pod_id.as_str(),
                         now,
                     )
-                    .await;
-                match acquire_result {
+                    .await
+                {
                     Ok(_) => {
-                        info!("Became a leader");
-                        if !is_leader {
-                            self.is_leader_sender.send(()).await.unwrap();
-                            self.is_leader_elected.store(true, Ordering::SeqCst);
-                        }
-                        is_leader = true;
+                        info!("Lease acquired, became a leader");
+                        self.is_leader_sender.send(()).await.unwrap();
+                        return;
                     }
-                    Err(K8sClientError::Conflict) => {
-                        info!("Some other instance updated the lease");
-                        self.is_leader_elected.store(true, Ordering::SeqCst);
-                    }
-                    Err(_) => {
-                        error!("Something went wrong during leader election");
+                    Err(e) => {
+                        info!("Failed to acquire lease. Reason: {:?}", e);
                     }
                 }
             } else {
-                info!(
-                    "Lease acquired by some other POD and lease duration second hasn't passed yet"
-                );
-                self.is_leader_elected.store(true, Ordering::SeqCst);
+                info!("Lease already acquired, waiting");
             }
-            info!("Waiting for {}", seconds);
-            sleep(std::time::Duration::from_secs(seconds as u64)).await;
+            sleep(std::time::Duration::from_secs(duration as u64)).await;
         }
+    }
+
+    async fn refresh_lease(&mut self) {
+        loop {
+            let lease = self
+                .client
+                .get_lease(LEASE_NAME, LEASE_NAMESPACE)
+                .await
+                .unwrap();
+            let duration = lease.object.spec.lease_duration_seconds;
+            let wait_time = duration >> 1;
+            let resource_version = lease.metadata.resource_version.clone().unwrap();
+            info!("Refreshing lease {}", LEASE_NAME);
+            let now = OffsetDateTime::now_utc();
+            match self
+                .client
+                .patch_lease(
+                    LEASE_NAMESPACE,
+                    LEASE_NAME,
+                    resource_version.as_str(),
+                    self.pod_id.as_str(),
+                    now,
+                )
+                .await
+            {
+                Ok(_) => {
+                    info!("Lease refreshed");
+                }
+                Err(e) => {
+                    error!("Failed to refresh lease. Reason: {:?}", e);
+                }
+            }
+            sleep(std::time::Duration::from_secs(wait_time as u64)).await;
+        }
+    }
+
+    pub async fn elect_leader(&mut self) {
+        self.acquire_lease().await;
+        self.refresh_lease().await;
     }
 }
