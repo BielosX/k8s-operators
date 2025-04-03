@@ -1,4 +1,5 @@
-use crate::k8s_client::client::K8sClient;
+use crate::k8s_client::client::{K8sClient, K8sClientError};
+use crate::k8s_types::{K8sObject, Lease};
 use crate::offset_date_time_parser::parse;
 use time::{Duration, OffsetDateTime};
 use tokio::sync::mpsc::Sender;
@@ -23,13 +24,32 @@ impl LeaderElector {
         }
     }
 
+    async fn get_lease(&mut self) -> K8sObject<Lease> {
+        self.client
+            .get_lease(LEASE_NAME, LEASE_NAMESPACE)
+            .await
+            .expect("Failed to get lease, should be available. Check yaml config")
+    }
+
+    async fn patch_lease(
+        &mut self,
+        version: &str,
+        now: &OffsetDateTime,
+    ) -> Result<(), K8sClientError> {
+        self.client
+            .patch_lease(
+                LEASE_NAMESPACE,
+                LEASE_NAME,
+                version,
+                self.pod_id.as_str(),
+                now.clone(),
+            )
+            .await
+    }
+
     async fn acquire_lease(&mut self) {
         loop {
-            let lease = self
-                .client
-                .get_lease(LEASE_NAME, LEASE_NAMESPACE)
-                .await
-                .unwrap();
+            let lease = self.get_lease().await;
             let duration = lease.object.spec.lease_duration_seconds;
             let now = OffsetDateTime::now_utc();
             let resource_version = lease.metadata.resource_version.clone().unwrap();
@@ -46,17 +66,7 @@ impl LeaderElector {
                 .unwrap_or(true);
             if can_acquire {
                 info!("Trying to acquire lease {}", LEASE_NAME);
-                match self
-                    .client
-                    .patch_lease(
-                        LEASE_NAMESPACE,
-                        LEASE_NAME,
-                        resource_version.as_str(),
-                        self.pod_id.as_str(),
-                        now,
-                    )
-                    .await
-                {
+                match self.patch_lease(resource_version.as_str(), &now).await {
                     Ok(_) => {
                         info!("Lease acquired, became a leader");
                         self.is_leader_sender.send(()).await.unwrap();
@@ -75,27 +85,13 @@ impl LeaderElector {
 
     async fn refresh_lease(&mut self) {
         loop {
-            let lease = self
-                .client
-                .get_lease(LEASE_NAME, LEASE_NAMESPACE)
-                .await
-                .unwrap();
+            let lease = self.get_lease().await;
             let duration = lease.object.spec.lease_duration_seconds;
             let wait_time = duration >> 1;
             let resource_version = lease.metadata.resource_version.clone().unwrap();
             info!("Refreshing lease {}", LEASE_NAME);
             let now = OffsetDateTime::now_utc();
-            match self
-                .client
-                .patch_lease(
-                    LEASE_NAMESPACE,
-                    LEASE_NAME,
-                    resource_version.as_str(),
-                    self.pod_id.as_str(),
-                    now,
-                )
-                .await
-            {
+            match self.patch_lease(resource_version.as_str(), &now).await {
                 Ok(_) => {
                     info!("Lease refreshed");
                 }
