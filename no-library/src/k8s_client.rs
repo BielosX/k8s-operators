@@ -1,8 +1,9 @@
 pub mod client {
     use crate::k8s_client::client::K8sClientError::{Conflict, Error, NotFound};
     use crate::k8s_types::{
-        Deployment, ExposedApp, K8sListObject, K8sObject, Lease, List, Service, Watch,
+        Deployment, Event, ExposedApp, K8sListObject, K8sObject, Lease, List, Service, Watch,
     };
+    use crate::offset_date_time_parser::format;
     use async_stream::stream;
     use futures::Stream;
     use reqwest::header::{HeaderMap, HeaderValue};
@@ -10,11 +11,8 @@ pub mod client {
     use serde::de::DeserializeOwned;
     use serde::{Deserialize, Serialize};
     use serde_json::{from_str, to_string};
-    use std::num::NonZeroU8;
     use std::str::from_utf8;
     use std::time::Duration;
-    use time::format_description::well_known::iso8601::{Config, EncodedConfig, TimePrecision};
-    use time::format_description::well_known::Iso8601;
     use time::OffsetDateTime;
     use tokio::fs;
     use tokio::time::sleep;
@@ -43,21 +41,22 @@ pub mod client {
             .expect("Unable to add root certificate")
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone)]
     pub enum K8sClientError {
         NotFound,
         Conflict,
-        Error,
+        #[allow(dead_code)]
+        Error(String),
     }
 
     impl K8sClientError {
-        pub fn from_status(status: StatusCode) -> Option<K8sClientError> {
+        pub fn from_status(status: StatusCode, text: &str) -> Option<K8sClientError> {
             match status.as_u16() {
                 404 => Some(NotFound),
                 409 => Some(Conflict),
                 _ => {
                     if !status.is_success() {
-                        Some(Error)
+                        Some(Error(String::from(text)))
                     } else {
                         None
                     }
@@ -121,7 +120,7 @@ pub mod client {
                 .await;
             let status = response.status();
             let text = response.text().await.unwrap();
-            K8sClientError::from_status(status)
+            K8sClientError::from_status(status, text.as_str())
                 .map(Err)
                 .unwrap_or_else(|| {
                     let object = from_str::<K8sObject<ExposedApp>>(text.as_str()).unwrap();
@@ -217,7 +216,7 @@ pub mod client {
             let result = self.send_with_retry(builder.body(payload)).await;
             let status = result.status();
             let text = result.text().await.unwrap();
-            K8sClientError::from_status(status)
+            K8sClientError::from_status(status, text.as_str())
                 .map(Err)
                 .unwrap_or_else(|| {
                     let object = from_str::<O>(text.as_str()).unwrap();
@@ -323,7 +322,7 @@ pub mod client {
                 .await;
             let status = response.status();
             let text = response.text().await.unwrap();
-            K8sClientError::from_status(status)
+            K8sClientError::from_status(status, text.as_str())
                 .map(Err)
                 .unwrap_or_else(|| {
                     let object = from_str::<List<K8sListObject<T>>>(text.as_str()).unwrap();
@@ -343,7 +342,7 @@ pub mod client {
             let result = self.send_with_retry(self.client.get(url)).await;
             let status = result.status();
             let text = result.text().await.unwrap();
-            K8sClientError::from_status(status)
+            K8sClientError::from_status(status, text.as_str())
                 .map(Err)
                 .unwrap_or_else(|| {
                     let lease = from_str::<K8sObject<Lease>>(text.as_str()).unwrap();
@@ -364,6 +363,18 @@ pub mod client {
             self.execute(self.client.put(url), app).await
         }
 
+        pub async fn post_event(
+            &mut self,
+            namespace: &str,
+            event: &K8sObject<Event>,
+        ) -> Result<K8sObject<Event>, K8sClientError> {
+            let url = format!(
+                "{}/apis/events.k8s.io/v1/namespaces/{}/events",
+                API_SERVER, namespace
+            );
+            self.execute(self.client.post(url), event).await
+        }
+
         pub async fn patch_lease(
             &mut self,
             namespace: &str,
@@ -372,11 +383,6 @@ pub mod client {
             holder_identity: &str,
             acquire_time: OffsetDateTime,
         ) -> Result<(), K8sClientError> {
-            const CONFIG: EncodedConfig = Config::DEFAULT
-                .set_time_precision(TimePrecision::Second {
-                    decimal_digits: NonZeroU8::new(6),
-                })
-                .encode();
             let entries = vec![
                 JsonPatchEntry {
                     op: String::from("test"),
@@ -391,7 +397,7 @@ pub mod client {
                 JsonPatchEntry {
                     op: String::from("add"),
                     path: String::from("/spec/acquireTime"),
-                    value: acquire_time.format(&Iso8601::<CONFIG>).unwrap(),
+                    value: format(acquire_time).unwrap(),
                 },
             ];
             let serialized = to_string(&entries).unwrap();
@@ -408,7 +414,8 @@ pub mod client {
                 )
                 .await;
             let status = response.status();
-            K8sClientError::from_status(status)
+            let text = response.text().await.unwrap();
+            K8sClientError::from_status(status, text.as_str())
                 .map(Err)
                 .unwrap_or(Ok(()))
         }

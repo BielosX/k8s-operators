@@ -1,9 +1,7 @@
 use crate::k8s_client::client::{K8sClient, K8sClientError};
-use std::num::NonZeroU8;
+use crate::offset_date_time_parser::parse;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use time::format_description::well_known::iso8601::{Config, EncodedConfig, TimePrecision};
-use time::format_description::well_known::Iso8601;
 use time::OffsetDateTime;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
@@ -45,11 +43,6 @@ impl LeaderElector {
             let duration = lease.object.spec.lease_duration_seconds;
             let seconds = duration >> 1;
             let now = OffsetDateTime::now_utc();
-            const CONFIG: EncodedConfig = Config::DEFAULT
-                .set_time_precision(TimePrecision::Second {
-                    decimal_digits: NonZeroU8::new(6),
-                })
-                .encode();
             let resource_version = lease.metadata.resource_version.clone().unwrap();
             let can_acquire = lease
                 .object
@@ -57,7 +50,7 @@ impl LeaderElector {
                 .acquire_time
                 .clone()
                 .map(|t| {
-                    let date = OffsetDateTime::parse(t.as_str(), &Iso8601::<CONFIG>).unwrap();
+                    let date = parse(t.as_str()).unwrap();
                     now > date
                         .checked_add(time::Duration::seconds(duration as i64))
                         .unwrap()

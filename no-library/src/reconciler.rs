@@ -1,22 +1,32 @@
 use crate::cache::{Cache, NamespacedName};
-use crate::k8s_client::client::K8sClient;
+use crate::k8s_client::client::{K8sClient, K8sClientError};
+use crate::k8s_types::EventType::Normal;
 use crate::k8s_types::{
-    Container, ContainerPort, Deployment, DeploymentSpec, ExposedApp, ExposedAppStatus, K8sObject,
-    Metadata, OwnerReference, PodSpec, PodTemplate, Selector, Service, ServicePort, ServiceSpec,
+    Container, ContainerPort, Deployment, DeploymentSpec, Event, EventType, ExposedApp,
+    ExposedAppStatus, K8sObject, Metadata, ObjectReference, OwnerReference, PodSpec, PodTemplate,
+    Selector, Service, ServicePort, ServiceSpec,
 };
+use crate::offset_date_time_parser::format;
+use rand::distr::{Alphanumeric, SampleString};
 use std::collections::HashMap;
+use time::OffsetDateTime;
 use tracing::info;
 
 pub struct Reconciler {
     client: K8sClient,
     cache: Cache,
+    pod_name: String,
 }
 
 type PodLabels = HashMap<String, String>;
 
 impl Reconciler {
-    pub fn new(client: K8sClient, cache: Cache) -> Self {
-        Reconciler { client, cache }
+    pub fn new(client: K8sClient, cache: Cache, pod_name: String) -> Self {
+        Reconciler {
+            client,
+            cache,
+            pod_name,
+        }
     }
 
     fn create_owner_reference(resource: &K8sObject<ExposedApp>) -> OwnerReference {
@@ -39,13 +49,54 @@ impl Reconciler {
         }
     }
 
+    fn random_str(len: usize) -> String {
+        Alphanumeric.sample_string(&mut rand::rng(), len)
+    }
+
+    async fn send_event(
+        &mut self,
+        resource: &K8sObject<ExposedApp>,
+        related: &ObjectReference,
+        event_type: EventType,
+        action: &str,
+        note: &str,
+        reason: &str,
+    ) -> Result<K8sObject<Event>, K8sClientError> {
+        let resource_name = resource.metadata.name.clone().unwrap();
+        let namespace = resource.metadata.namespace.clone().unwrap();
+        let suffix = Self::random_str(10).to_lowercase();
+        let name = format!("{}-{}", resource_name, suffix);
+        let event_time = format(OffsetDateTime::now_utc()).unwrap();
+        let event = K8sObject {
+            api_version: String::from("events.k8s.io/v1"),
+            kind: String::from("Event"),
+            metadata: Metadata {
+                name: Some(name),
+                namespace: Some(namespace.clone()),
+                ..Metadata::default()
+            },
+            object: Event {
+                event_time,
+                action: String::from(action),
+                note: Some(String::from(note)),
+                reason: String::from(reason),
+                regarding: Some(resource.into()),
+                related: Some(related.clone()),
+                reporting_controller: String::from("no-library"),
+                reporting_instance: self.pod_name.clone(),
+                event_type,
+            },
+        };
+        self.client.post_event(namespace.as_str(), &event).await
+    }
+
     async fn save_deployment(
         &mut self,
         name: &str,
         namespace: &str,
         pod_labels: &PodLabels,
         resource: &K8sObject<ExposedApp>,
-    ) -> Result<(), String> {
+    ) -> Result<K8sObject<Deployment>, String> {
         let deployment = K8sObject {
             api_version: String::from("apps/v1"),
             kind: String::from("Deployment"),
@@ -83,9 +134,9 @@ impl Reconciler {
                 info!("Deployment created/updated");
                 map.insert(
                     NamespacedName::new(name, namespace),
-                    result.metadata.resource_version.unwrap(),
+                    result.metadata.resource_version.clone().unwrap(),
                 );
-                Ok(())
+                Ok(result)
             }
             Err(e) => Err(format!("Error occurred while saving a deployment: {:?}", e)),
         }
@@ -97,7 +148,7 @@ impl Reconciler {
         namespace: &str,
         pod_labels: &PodLabels,
         resource: &K8sObject<ExposedApp>,
-    ) -> Result<(), String> {
+    ) -> Result<K8sObject<Service>, String> {
         let service = K8sObject {
             api_version: String::from("v1"),
             kind: String::from("Service"),
@@ -121,9 +172,9 @@ impl Reconciler {
                 info!("Service created/updated");
                 map.insert(
                     NamespacedName::new(name, namespace),
-                    result.metadata.resource_version.unwrap(),
+                    result.metadata.resource_version.clone().unwrap(),
                 );
-                Ok(())
+                Ok(result)
             }
             Err(e) => Err(format!("Error occurred while creating a service: {:?}", e)),
         }
@@ -147,7 +198,23 @@ impl Reconciler {
             )
             .await
         {
-            Ok(_) => {}
+            Ok(deployment) => {
+                let note = format!(
+                    "Deployment {} provisioned successfully with {} replicas",
+                    deployment.metadata.name.clone().unwrap(),
+                    deployment.object.spec.replicas
+                );
+                self.send_event(
+                    resource,
+                    &deployment.into(),
+                    Normal,
+                    "DeploymentProvisioned",
+                    note.as_str(),
+                    "ProvisioningRequested",
+                )
+                .await
+                .unwrap();
+            }
             Err(e) => return Err(e),
         }
         let service_name = format!("{}-service", name);
@@ -160,7 +227,22 @@ impl Reconciler {
             )
             .await
         {
-            Ok(_) => {}
+            Ok(service) => {
+                let note = format!(
+                    "Service {} successfully provisioned",
+                    service.metadata.name.clone().unwrap()
+                );
+                self.send_event(
+                    resource,
+                    &service.into(),
+                    Normal,
+                    "ServiceProvisioned",
+                    note.as_str(),
+                    "ProvisioningRequested",
+                )
+                .await
+                .unwrap();
+            }
             Err(e) => return Err(e),
         }
         resource.object.status = Some(ExposedAppStatus {

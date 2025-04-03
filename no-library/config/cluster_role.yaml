@@ -36,3 +36,10 @@ rules:
     apiGroups: [""]
     resources:
       - "services"
+  - verbs:
+      - "create"
+      - "update"
+    apiGroups:
+      - "events.k8s.io"
+    resources:
+      - "events"

@@ -35,7 +35,7 @@ pub mod operator {
         leader_elector.elect_leader().await;
     }
 
-    pub async fn handle_owned_resources(mut receiver: Receiver<()>) {
+    pub async fn handle_owned_resources(mut receiver: Receiver<()>, pod_name: String) {
         receiver.recv().await;
         info!("Started doing operator stuff");
         let (app_sender, app_receiver): (
@@ -44,7 +44,7 @@ pub mod operator {
         ) = mpsc::channel(64);
         let cache = new_cache();
         select! {
-            _ = tokio::spawn(handle_reconcile_requests(app_receiver, clone_cache(&cache))) => {}
+            _ = tokio::spawn(handle_reconcile_requests(app_receiver, clone_cache(&cache), pod_name)) => {}
             _ = tokio::spawn(handle_exposed_apps(app_sender.clone(), clone_cache(&cache))) => {}
             _ = tokio::spawn(handle_owned_update::<Deployment>(app_sender.clone(), ALL_DEPLOYMENTS_LIST, clone_cache(&cache))) => {}
             _ = tokio::spawn(handle_owned_update::<Service>(app_sender.clone(), ALL_SERVICES_LIST, clone_cache(&cache))) => {}
@@ -187,8 +187,9 @@ pub mod operator {
     async fn handle_reconcile_requests(
         mut receiver: Receiver<K8sObject<ExposedApp>>,
         cache: Cache,
+        pod_name: String,
     ) {
-        let mut reconciler = Reconciler::new(K8sClient::new().await, cache);
+        let mut reconciler = Reconciler::new(K8sClient::new().await, cache, pod_name);
         let mut queue: DelayQueue<QueueEntry> = DelayQueue::with_capacity(32);
         loop {
             for _ in 0..10 {

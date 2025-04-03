@@ -14,6 +14,37 @@ pub struct OwnerReference {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ObjectReference {
+    pub api_version: String,
+    pub kind: String,
+    pub name: String,
+    pub namespace: String,
+    pub uid: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub enum EventType {
+    Normal,
+    Warning,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub event_time: String,
+    pub action: String,
+    pub note: Option<String>,
+    pub reason: String,
+    pub regarding: Option<ObjectReference>,
+    pub related: Option<ObjectReference>,
+    pub reporting_controller: String,
+    pub reporting_instance: String,
+    #[serde(rename = "type")]
+    pub event_type: EventType,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ManageFields {
     pub manager: String,
 }
@@ -191,3 +222,28 @@ pub struct LeaseSpec {
 pub struct Lease {
     pub spec: LeaseSpec,
 }
+
+impl<'a, T> Into<ObjectReference> for &'a K8sObject<T> {
+    fn into(self) -> ObjectReference {
+        ObjectReference {
+            api_version: self.api_version.clone(),
+            kind: self.kind.clone(),
+            name: self.metadata.name.clone().unwrap(),
+            namespace: self.metadata.namespace.clone().unwrap(),
+            uid: self.metadata.uid.clone().unwrap(),
+        }
+    }
+}
+
+impl<T> Into<ObjectReference> for K8sObject<T> {
+    fn into(self) -> ObjectReference {
+        ObjectReference {
+            api_version: self.api_version,
+            kind: self.kind,
+            name: self.metadata.name.unwrap(),
+            namespace: self.metadata.namespace.unwrap(),
+            uid: self.metadata.uid.unwrap(),
+        }
+    }
+}
+

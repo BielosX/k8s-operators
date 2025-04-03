@@ -2,6 +2,7 @@ mod cache;
 mod k8s_client;
 mod k8s_types;
 mod leader_election;
+mod offset_date_time_parser;
 mod operator;
 mod reconciler;
 
@@ -39,8 +40,8 @@ async fn main() {
         .await
         .unwrap();
     select! {
-        _ = tokio::spawn(elect_leader(pod_name, Arc::clone(&is_leader_elected), sender)) => {}
-        _ = tokio::spawn(handle_owned_resources(receiver)) => {}
+        _ = tokio::spawn(elect_leader(pod_name.clone(), Arc::clone(&is_leader_elected), sender)) => {}
+        _ = tokio::spawn(handle_owned_resources(receiver, pod_name)) => {}
         _ = axum::serve(listener, app) => {}
     }
 }
