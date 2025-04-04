@@ -67,6 +67,13 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if len(exposedApp.Status.Conditions) == 0 {
+		err = r.InitStatus(ctx, exposedApp)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	deploymentName := fmt.Sprintf("%s-%s-deployment", exposedApp.Name, exposedApp.Namespace)
 	serviceName := fmt.Sprintf("%s-%s-service", exposedApp.Name, exposedApp.Namespace)
 
@@ -102,6 +109,17 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			"DeploymentUpdated",
 			"Deployment %s updated",
 			deploymentName)
+	}
+	meta.SetStatusCondition(&exposedApp.Status.Conditions, metav1.Condition{
+		Status:  metav1.ConditionTrue,
+		Reason:  "Provisioned",
+		Message: "Deployment ready",
+		Type:    "DeploymentReady",
+	})
+	err = r.Status().Update(ctx, exposedApp)
+	if err != nil {
+		logger.Error(err, "Unable to update ExposedApp Status")
+		return ctrl.Result{}, err
 	}
 
 	service := &corev1.Service{}
@@ -147,9 +165,9 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	exposedApp.Status.LastUpdateBy = r.PodName
 	meta.SetStatusCondition(&exposedApp.Status.Conditions, metav1.Condition{
 		Status:  metav1.ConditionTrue,
-		Reason:  "Ready",
-		Message: "Deployment and Service created",
-		Type:    "Available",
+		Reason:  "Provisioned",
+		Message: "Service ready",
+		Type:    "ServiceReady",
 	})
 	err = r.Status().Update(ctx, exposedApp)
 	if err != nil {
@@ -158,6 +176,28 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ExposedAppReconciler) InitStatus(ctx context.Context, exposedApp *stablev1.ExposedApp) error {
+	logger := log.FromContext(ctx)
+	meta.SetStatusCondition(&exposedApp.Status.Conditions, metav1.Condition{
+		Status:  metav1.ConditionFalse,
+		Reason:  "Provisioning",
+		Message: "Deployment not ready",
+		Type:    "DeploymentReady",
+	})
+	meta.SetStatusCondition(&exposedApp.Status.Conditions, metav1.Condition{
+		Status:  metav1.ConditionFalse,
+		Reason:  "Provisioning",
+		Message: "Service not ready",
+		Type:    "ServiceReady",
+	})
+	err := r.Status().Update(ctx, exposedApp)
+	if err != nil {
+		logger.Error(err, "Unable to update ExposedApp Status")
+		return err
+	}
+	return nil
 }
 
 func (r *ExposedAppReconciler) Service(exposedApp *stablev1.ExposedApp, podLabels map[string]string, serviceName string) (*corev1.Service, error) {
