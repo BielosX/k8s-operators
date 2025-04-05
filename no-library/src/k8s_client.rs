@@ -16,7 +16,7 @@ pub mod client {
     use time::OffsetDateTime;
     use tokio::fs;
     use tokio::time::sleep;
-    use tracing::info;
+    use tracing::{error, info};
 
     const SERVICE_ACCOUNT_PATH: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
     const API_SERVER: &str = "https://kubernetes.default.svc";
@@ -97,14 +97,23 @@ pub mod client {
             headers
         }
 
-        pub async fn get_exposed_apps(&mut self) -> List<K8sObject<ExposedApp>> {
+        pub async fn get_exposed_apps(
+            &mut self,
+        ) -> Result<List<K8sObject<ExposedApp>>, K8sClientError> {
             let result = self
                 .send_with_retry(
                     self.client
                         .get(format!("{}/{}", API_SERVER, EXPOSED_APPS_LIST)),
                 )
                 .await;
-            from_str::<List<K8sObject<ExposedApp>>>(result.text().await.unwrap().as_str()).unwrap()
+            let status = result.status();
+            let text = result.text().await.unwrap();
+            K8sClientError::from_status(status, text.as_str())
+                .map(Err)
+                .unwrap_or_else(|| {
+                    let object = from_str::<List<K8sObject<ExposedApp>>>(text.as_str()).unwrap();
+                    Ok(object)
+                })
         }
 
         pub async fn get_exposed_app(
@@ -286,30 +295,41 @@ pub mod client {
             &mut self,
             uri: &str,
             resource_version: &str,
-        ) -> impl Stream<Item = Watch<K8sListObject<T>>> {
+        ) -> Result<impl Stream<Item = Watch<K8sListObject<T>>>, K8sClientError> {
             let mut response = self
                 .send_with_retry(self.client.get(format!(
                     "{}/{}?watch=1&resourceVersion={}",
                     API_SERVER, uri, resource_version
                 )))
                 .await;
-            stream! {
+            let status = response.status();
+            if let Some(error) = K8sClientError::from_status(status, "") {
+                return Err(error);
+            }
+            Ok(stream! {
                 loop {
                     if let Some(chunk) = response.chunk().await.unwrap() {
                         let payload = from_utf8(chunk.as_ref()).unwrap();
-                        let event = from_str::<Watch<K8sListObject<T>>>(payload).unwrap();
-                        yield event;
+                        match from_str::<Watch<K8sListObject<T>>>(payload) {
+                            Ok(event) => {
+                                yield event;
+                            }
+                            Err(e) => {
+                                error!("Error occurred while trying to watch k8s object: {:?}", e);
+                                break;
+                            }
+                        }
                     } else {
                         break;
                     }
                 }
-            }
+            })
         }
 
         pub async fn watch_exposed_apps(
             &mut self,
             resource_version: &str,
-        ) -> impl Stream<Item = Watch<K8sListObject<ExposedApp>>> {
+        ) -> Result<impl Stream<Item = Watch<K8sListObject<ExposedApp>>>, K8sClientError> {
             self.watch(EXPOSED_APPS_LIST, resource_version).await
         }
 

@@ -53,6 +53,7 @@ impl LeaderElector {
             let duration = lease.object.spec.lease_duration_seconds;
             let now = OffsetDateTime::now_utc();
             let resource_version = lease.metadata.resource_version.clone().unwrap();
+            let acquired_by = lease.object.spec.holder_identity.clone();
             let can_acquire = lease
                 .object
                 .spec
@@ -77,7 +78,10 @@ impl LeaderElector {
                     }
                 }
             } else {
-                info!("Lease already acquired, waiting");
+                info!(
+                    "Lease already acquired by {}, waiting",
+                    acquired_by.unwrap()
+                );
             }
             sleep(std::time::Duration::from_secs(duration as u64)).await;
         }

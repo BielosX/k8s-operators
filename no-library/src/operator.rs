@@ -1,7 +1,7 @@
 pub mod operator {
     use crate::cache::{clone_cache, new_cache, Cache, NamespacedName};
     use crate::k8s_client::client::{K8sClient, K8sClientError};
-    use crate::k8s_types::{Deployment, ExposedApp, K8sListObject, K8sObject, List, Service};
+    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, Service};
     use crate::leader_election::LeaderElector;
     use crate::reconciler::Reconciler;
     use futures::{pin_mut, StreamExt};
@@ -13,7 +13,7 @@ pub mod operator {
     use tokio::sync::mpsc::{Receiver, Sender};
     use tokio::time::sleep;
     use tokio_util::time::DelayQueue;
-    use tracing::{error, info};
+    use tracing::{error, info, warn};
 
     const ALL_DEPLOYMENTS_LIST: &str = "apis/apps/v1/deployments";
     const ALL_SERVICES_LIST: &str = "api/v1/services";
@@ -56,41 +56,56 @@ pub mod operator {
         let mut client = K8sClient::new().await;
         loop {
             info!("Watching ExposedApp");
-            let get_result = client.get_exposed_apps().await;
-            let resource_version = get_result.metadata.resource_version.clone().unwrap();
-            for item in get_result.items {
-                sender.send(item).await.unwrap();
-            }
-            let stream = client.watch_exposed_apps(resource_version.as_str()).await;
-            pin_mut!(stream);
-            'events: while let Some(event) = stream.next().await {
-                info!("Received ExposedApp {:?} event", event.event_type);
-                let name = event.object.metadata.name.clone().unwrap();
-                let namespace = event.object.metadata.namespace.clone().unwrap();
-                let namespaced_name = NamespacedName::new(name.as_str(), namespace.as_str());
-                let resource_version = event.object.metadata.resource_version.clone().unwrap();
-                let map = cache.lock().await;
-                if let Some(value) = map.get(&namespaced_name) {
-                    if resource_version == *value {
-                        info!(
-                            "ExposedApp {} version {} already handled",
-                            name, resource_version
-                        );
-                        continue 'events;
+            match client.get_exposed_apps().await {
+                Ok(get_result) => {
+                    let resource_version = get_result.metadata.resource_version.clone().unwrap();
+                    for item in get_result.items {
+                        sender.send(item).await.unwrap();
+                    }
+                    match client.watch_exposed_apps(resource_version.as_str()).await {
+                        Ok(stream) => {
+                            pin_mut!(stream);
+                            'events: while let Some(event) = stream.next().await {
+                                info!("Received ExposedApp {:?} event", event.event_type);
+                                let name = event.object.metadata.name.clone().unwrap();
+                                let namespace = event.object.metadata.namespace.clone().unwrap();
+                                let namespaced_name =
+                                    NamespacedName::new(name.as_str(), namespace.as_str());
+                                let resource_version =
+                                    event.object.metadata.resource_version.clone().unwrap();
+                                let map = cache.lock().await;
+                                if let Some(value) = map.get(&namespaced_name) {
+                                    if resource_version == *value {
+                                        info!(
+                                            "ExposedApp {} version {} already handled",
+                                            name, resource_version
+                                        );
+                                        continue 'events;
+                                    }
+                                }
+                                info!("Sending reconcile event for {}", name);
+                                sender
+                                    .send(K8sObject {
+                                        api_version: String::from("stable.no-library.com/v1"),
+                                        kind: String::from("ExposedApp"),
+                                        metadata: event.object.metadata.clone(),
+                                        object: event.object.object.clone(),
+                                    })
+                                    .await
+                                    .unwrap();
+                            }
+                            warn!("ExposedApp stream closed. Will retry");
+                        }
+                        Err(e) => {
+                            error!("Error occurred while trying to watch ExposedApps: {:?}", e);
+                        }
                     }
                 }
-                info!("Sending reconcile event for {}", name);
-                sender
-                    .send(K8sObject {
-                        api_version: String::from("stable.no-library.com/v1"),
-                        kind: String::from("ExposedApp"),
-                        metadata: event.object.metadata.clone(),
-                        object: event.object.object.clone(),
-                    })
-                    .await
-                    .unwrap();
+                Err(e) => {
+                    error!("Error occurred while trying to get ExposedApps: {:?}", e);
+                }
             }
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(2)).await;
         }
     }
 
@@ -102,75 +117,99 @@ pub mod operator {
         let mut client = K8sClient::new().await;
         loop {
             info!("Watching URI {}", uri);
-            let get_result: List<K8sListObject<T>> = client.get_all(uri).await.unwrap();
-            let resource_version = get_result.metadata.resource_version.clone().unwrap();
-            let stream = client.watch::<T>(uri, resource_version.as_str()).await;
-            pin_mut!(stream);
-            'events: while let Some(event) = stream.next().await {
-                let object_name = event.object.metadata.name.unwrap();
-                let version = event.object.metadata.resource_version.clone().unwrap();
-                info!(
-                    "Received {:?} event for {}, version {}",
-                    event.event_type, object_name, version
-                );
-                let last_manager = event
-                    .object
-                    .metadata
-                    .managed_fields
-                    .and_then(|fields| fields.last().cloned())
-                    .map(|fields| fields.manager);
-                if let Some(manager) = last_manager {
-                    if manager == KUBE_CONTROLLER_MANAGER {
-                        info!(
-                            "Last update by {}, that's fine. Skip",
-                            KUBE_CONTROLLER_MANAGER
-                        );
-                        continue 'events;
-                    } else {
-                        info!("Last update by {}, should reconcile", manager);
-                    }
-                }
-                let namespace = event.object.metadata.namespace.unwrap();
-                let namespaced_name = NamespacedName::new(object_name.as_str(), namespace.as_str());
-                let map = cache.lock().await;
-                if let Some(value) = map.get(&namespaced_name) {
-                    if version == *value {
-                        info!("Object {} version {} already handled", object_name, version);
-                        continue 'events;
-                    }
-                } else {
-                    info!("No {} in cache, skip", object_name);
-                    continue 'events;
-                }
-                info!("Looking for owner references for {}", object_name);
-                if let Some(references) = event.object.metadata.owner_references {
-                    if let Some(exposed_app_ref) =
-                        references.iter().find(|&item| item.kind == "ExposedApp")
-                    {
-                        let owner_name = exposed_app_ref.name.clone();
-                        info!(
-                            "Found ExposedApp owner {} for object {}",
-                            owner_name, object_name
-                        );
-                        match client
-                            .get_exposed_app(owner_name.as_str(), namespace.as_str())
-                            .await
-                        {
-                            Ok(app) => {
-                                sender.send(app).await.unwrap();
-                            }
-                            Err(K8sClientError::NotFound) => {
+            match client.get_all::<T>(uri).await {
+                Ok(result) => {
+                    let resource_version = result.metadata.resource_version.clone().unwrap();
+                    match client.watch::<T>(uri, resource_version.as_str()).await {
+                        Ok(stream) => {
+                            pin_mut!(stream);
+                            'events: while let Some(event) = stream.next().await {
+                                let object_name = event.object.metadata.name.unwrap();
+                                let version =
+                                    event.object.metadata.resource_version.clone().unwrap();
                                 info!(
-                                    "ExposedApp {} not found, probably already deleted",
-                                    owner_name
+                                    "Received {:?} event for {}, version {}",
+                                    event.event_type, object_name, version
                                 );
+                                let last_manager = event
+                                    .object
+                                    .metadata
+                                    .managed_fields
+                                    .and_then(|fields| fields.last().cloned())
+                                    .map(|fields| fields.manager);
+                                if let Some(manager) = last_manager {
+                                    if manager == KUBE_CONTROLLER_MANAGER {
+                                        info!(
+                                            "Last update by {}, that's fine. Skip",
+                                            KUBE_CONTROLLER_MANAGER
+                                        );
+                                        continue 'events;
+                                    } else {
+                                        info!("Last update by {}, should reconcile", manager);
+                                    }
+                                }
+                                let namespace = event.object.metadata.namespace.unwrap();
+                                let namespaced_name =
+                                    NamespacedName::new(object_name.as_str(), namespace.as_str());
+                                let map = cache.lock().await;
+                                if let Some(value) = map.get(&namespaced_name) {
+                                    if version == *value {
+                                        info!(
+                                            "Object {} version {} already handled",
+                                            object_name, version
+                                        );
+                                        continue 'events;
+                                    }
+                                } else {
+                                    info!("No {} in cache, skip", object_name);
+                                    continue 'events;
+                                }
+                                info!("Looking for owner references for {}", object_name);
+                                if let Some(references) = event.object.metadata.owner_references {
+                                    if let Some(exposed_app_ref) =
+                                        references.iter().find(|&item| item.kind == "ExposedApp")
+                                    {
+                                        let owner_name = exposed_app_ref.name.clone();
+                                        info!(
+                                            "Found ExposedApp owner {} for object {}",
+                                            owner_name, object_name
+                                        );
+                                        match client
+                                            .get_exposed_app(
+                                                owner_name.as_str(),
+                                                namespace.as_str(),
+                                            )
+                                            .await
+                                        {
+                                            Ok(app) => {
+                                                sender.send(app).await.unwrap();
+                                            }
+                                            Err(K8sClientError::NotFound) => {
+                                                info!(
+                                            "ExposedApp {} not found, probably already deleted",
+                                            owner_name
+                                        );
+                                            }
+                                            Err(_) => {}
+                                        }
+                                    }
+                                }
                             }
-                            Err(_) => {}
+                            warn!("{} stream closed. Will retry", uri);
+                        }
+                        Err(e) => {
+                            error!(
+                                "Error occurred while trying to watch Owned Resource: {:?}",
+                                e
+                            );
                         }
                     }
                 }
+                Err(e) => {
+                    error!("Error occurred while trying to get Owned Resource: {:?}", e);
+                }
             }
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(2)).await;
         }
     }
 
