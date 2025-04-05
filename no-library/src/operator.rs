@@ -42,12 +42,12 @@ pub mod operator {
     }
 
     struct QueueEntry {
-        entry: K8sObject<ExposedApp>,
+        entry: NamespacedName,
         delay: Duration,
     }
 
     impl QueueEntry {
-        pub fn new(entry: K8sObject<ExposedApp>, delay: Duration) -> Self {
+        pub fn new(entry: NamespacedName, delay: Duration) -> Self {
             QueueEntry { entry, delay }
         }
     }
@@ -185,7 +185,15 @@ pub mod operator {
             for _ in 0..10 {
                 if let Ok(entry) = receiver.try_recv() {
                     let delay = Duration::from_secs(0);
-                    queue.insert(QueueEntry::new(entry.clone(), delay), delay);
+                    let name = entry.metadata.name.clone().unwrap();
+                    let namespace = entry.metadata.namespace.clone().unwrap();
+                    queue.insert(
+                        QueueEntry::new(
+                            NamespacedName::new(name.as_str(), namespace.as_str()),
+                            delay,
+                        ),
+                        delay,
+                    );
                     info!("Entry {} enqueued", entry.metadata.name.unwrap());
                 } else {
                     break;
@@ -193,12 +201,17 @@ pub mod operator {
             }
             while let Some(expired) = queue.next().await {
                 let mut delay = expired.get_ref().delay.clone();
-                let mut exposed_app = expired.get_ref().entry.clone();
-                let name = exposed_app.metadata.name.clone().unwrap();
-                info!("ExposedApp {} ready to reconcile", name);
-                match reconciler.reconcile(&mut exposed_app).await {
+                let namespaced_name = NamespacedName::new(
+                    expired.get_ref().entry.name.as_str(),
+                    expired.get_ref().entry.namespace.as_str(),
+                );
+                info!("ExposedApp {} ready to reconcile", namespaced_name.name);
+                match reconciler.reconcile(namespaced_name.clone()).await {
                     Ok(_) => {
-                        info!("ExposedApp {} successfully reconciled", name);
+                        info!(
+                            "ExposedApp {} successfully reconciled",
+                            namespaced_name.name
+                        );
                     }
                     Err(err) => {
                         error!(err);
@@ -209,7 +222,7 @@ pub mod operator {
                                 delay = delay.mul(2);
                             }
                         }
-                        queue.insert(QueueEntry::new(exposed_app.clone(), delay), delay);
+                        queue.insert(QueueEntry::new(namespaced_name, delay), delay);
                     }
                 }
             }

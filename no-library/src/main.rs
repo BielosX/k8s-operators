@@ -26,8 +26,8 @@ async fn main() {
         .await
         .unwrap();
     select! {
+        _ = axum::serve(listener, app) => {}
         _ = tokio::spawn(elect_leader(pod_name.clone(), sender)) => {}
         _ = tokio::spawn(handle_owned_resources(receiver, pod_name)) => {}
-        _ = axum::serve(listener, app) => {}
     }
 }

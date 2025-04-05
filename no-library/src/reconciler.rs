@@ -180,7 +180,10 @@ impl Reconciler {
         }
     }
 
-    pub async fn reconcile(&mut self, resource: &mut K8sObject<ExposedApp>) -> Result<(), String> {
+    async fn reconcile_resource(
+        &mut self,
+        resource: &mut K8sObject<ExposedApp>,
+    ) -> Result<(), String> {
         let name = resource.metadata.name.clone().unwrap();
         let namespace = resource.metadata.namespace.clone().unwrap();
         info!("Synchronizing resource {} namespace {}", name, namespace);
@@ -271,5 +274,22 @@ impl Reconciler {
             }
         }
         Ok(())
+    }
+
+    pub async fn reconcile(&mut self, namespaced_name: NamespacedName) -> Result<(), String> {
+        let name = namespaced_name.name;
+        let namespace = namespaced_name.namespace;
+        match self
+            .client
+            .get_exposed_app(name.as_str(), namespace.as_str())
+            .await
+        {
+            Ok(mut resource) => self.reconcile_resource(&mut resource).await,
+            Err(K8sClientError::NotFound) => {
+                info!("ExposedApp not found, probably already deleted. It's fine");
+                Ok(())
+            }
+            Err(e) => Err(format!("Unable to get ExposedApp: {:?}", e)),
+        }
     }
 }
