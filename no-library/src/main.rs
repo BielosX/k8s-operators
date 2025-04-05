@@ -14,6 +14,7 @@ use std::env;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tracing::error;
 
 #[tokio::main]
 async fn main() {
@@ -26,8 +27,8 @@ async fn main() {
         .await
         .unwrap();
     select! {
-        _ = axum::serve(listener, app) => {}
-        _ = tokio::spawn(elect_leader(pod_name.clone(), sender)) => {}
-        _ = tokio::spawn(handle_owned_resources(receiver, pod_name)) => {}
+        _ = axum::serve(listener, app) => { error!("HTTP server stopped working") }
+        _ = tokio::spawn(elect_leader(pod_name.clone(), sender)) => { error!("Leader elector stopped working") }
+        _ = tokio::spawn(handle_owned_resources(receiver, pod_name)) => { error!("Resources handler stopped working") }
     }
 }
