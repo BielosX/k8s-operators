@@ -9,6 +9,7 @@ for selectors (and other stuff) just create single ExposedApp.
 
 Commands used to set up the project
 ```shell
+# Everything will be generated in k3builder.com domain
 kubebuilder init --domain k3builder.com --repo k3builder.com/exposedapp
 # Creates CRD ExposedApp with group stable.k3builder.com and version v1
 kubebuilder create api --group stable --version v1 --kind ExposedApp
