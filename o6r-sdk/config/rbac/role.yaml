@@ -15,6 +15,7 @@ rules:
       - pods/exec
       - pods/log
       - services
+      - events
     verbs:
       - create
       - delete

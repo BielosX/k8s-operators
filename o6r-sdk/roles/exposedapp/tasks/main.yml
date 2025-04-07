@@ -23,15 +23,29 @@
                 image: '{{ image }}'
                 ports:
                   - containerPort: '{{ container_port }}'
+# https://galaxy.ansible.com/ui/repo/published/operator_sdk/util/
 - name: Set Deployment Status
-  kubernetes.core.k8s:
-    wait: true
-    state: patched
-    definition:
-      kind: ExposedApp
+  k8s_status:
+    kind: ExposedApp
+    api_version: "stable.o6r-sdk.com/v1"
+    name: '{{ ansible_operator_meta.name }}'
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    status:
+      deploymentName: '{{ deployment_name }}'
+# https://github.com/operator-framework/operator-sdk-ansible-util/issues/49#issuecomment-1786207059
+- name: Publish Deployment Provisioned Event
+  k8s_event:
+    state: present
+    name: '{{ deployment_name }}-provisioned-event'
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    message: "Deployment provisioned"
+    reason: "Deployment provisioning requested"
+    type: "Normal"
+    involvedObject:
       apiVersion: "stable.o6r-sdk.com/v1"
-      status:
-        deploymentName: '{{ deployment_name }}'
+      kind: ExposedApp
+      name: '{{ ansible_operator_meta.name }}'
+      namespace: '{{ ansible_operator_meta.namespace }}'
 - name: Provision Service
   kubernetes.core.k8s:
     wait: true
@@ -51,11 +65,23 @@
             targetPort: '{{ container_port }}'
             nodePort: '{{ node_port | default(omit) }}'
 - name: Set Service Status
-  kubernetes.core.k8s:
-    wait: true
-    state: patched
-    definition:
-      kind: ExposedApp
+  k8s_status:
+    kind: ExposedApp
+    api_version: "stable.o6r-sdk.com/v1"
+    name: '{{ ansible_operator_meta.name }}'
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    status:
+      serviceName: '{{ service_name }}'
+- name: Publish Service Provisioned Event
+  k8s_event:
+    state: present
+    name: '{{ service_name }}-provisioned-event'
+    namespace: '{{ ansible_operator_meta.namespace }}'
+    message: "Service provisioned"
+    reason: "Service provisioning requested"
+    type: "Normal"
+    involvedObject:
       apiVersion: "stable.o6r-sdk.com/v1"
-      status:
-        serviceName: '{{ service_name }}'
+      kind: ExposedApp
+      name: '{{ ansible_operator_meta.name }}'
+      namespace: '{{ ansible_operator_meta.namespace }}'
