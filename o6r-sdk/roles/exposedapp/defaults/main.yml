@@ -1,0 +1,3 @@
+---
+protocol: "TCP"
+service_type: "ClusterIP"

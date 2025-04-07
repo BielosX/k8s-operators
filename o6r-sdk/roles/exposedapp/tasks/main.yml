@@ -1,0 +1,61 @@
+---
+- name: Provision Deployment
+  kubernetes.core.k8s:
+    wait: true
+    definition:
+      kind: Deployment
+      apiVersion: apps/v1
+      metadata:
+        name: '{{ deployment_name }}'
+        namespace: '{{ ansible_operator_meta.namespace }}'
+      spec:
+        replicas: '{{ replicas }}'
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: '{{ deployment_name }}'
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/instance: '{{ deployment_name }}'
+          spec:
+            containers:
+              - name: main
+                image: '{{ image }}'
+                ports:
+                  - containerPort: '{{ container_port }}'
+- name: Set Deployment Status
+  kubernetes.core.k8s:
+    wait: true
+    state: patched
+    definition:
+      kind: ExposedApp
+      apiVersion: "stable.o6r-sdk.com/v1"
+      status:
+        deploymentName: '{{ deployment_name }}'
+- name: Provision Service
+  kubernetes.core.k8s:
+    wait: true
+    definition:
+      kind: Service
+      apiVersion: v1
+      metadata:
+        name: '{{ service_name }}'
+        namespace: '{{ ansible_operator_meta.namespace }}'
+      spec:
+        type: '{{ service_type }}'
+        selector:
+          app.kubernetes.io/instance: '{{ deployment_name }}'
+        ports:
+          - protocol: '{{ protocol }}'
+            port: '{{ port }}'
+            targetPort: '{{ container_port }}'
+            nodePort: '{{ node_port | default(omit) }}'
+- name: Set Service Status
+  kubernetes.core.k8s:
+    wait: true
+    state: patched
+    definition:
+      kind: ExposedApp
+      apiVersion: "stable.o6r-sdk.com/v1"
+      status:
+        serviceName: '{{ service_name }}'

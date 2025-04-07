@@ -1,0 +1,9 @@
+---
+# Use the 'create api' subcommand to add watches to this file.
+- version: v1
+  group: stable.o6r-sdk.com
+  kind: ExposedApp
+  role: exposedapp
+  manageStatus: True
+  watchDependentResources: True
+# +kubebuilder:scaffold:watch

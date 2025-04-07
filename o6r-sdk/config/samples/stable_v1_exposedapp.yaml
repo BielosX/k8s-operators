@@ -1,0 +1,9 @@
+apiVersion: stable.o6r-sdk.com/v1
+kind: ExposedApp
+metadata:
+  labels:
+    app.kubernetes.io/name: o6r-sdk
+    app.kubernetes.io/managed-by: kustomize
+  name: exposedapp-sample
+spec:
+  # TODO(user): Add fields here

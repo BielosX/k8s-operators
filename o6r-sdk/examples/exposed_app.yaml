@@ -1,0 +1,11 @@
+apiVersion: stable.o6r-sdk.com/v1
+kind: ExposedApp
+metadata:
+  name: demo-exposed-app
+  namespace: example
+spec:
+  replicas: 2
+  image: "nginx:latest"
+  protocol: TCP
+  port: 3000
+  containerPort: 80

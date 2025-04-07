@@ -1,0 +1,10 @@
+deploy:
+    #!/bin/bash -e
+    TAG=$(date +%s)
+    export IMG="controller:${TAG}"
+    make docker-build
+    kind load docker-image "${IMG}"
+    make install deploy
+
+apply-example:
+    kustomize build examples | kubectl apply -f -

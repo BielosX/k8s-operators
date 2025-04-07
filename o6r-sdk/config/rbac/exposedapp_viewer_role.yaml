@@ -1,0 +1,23 @@
+# permissions for end users to view exposedapps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: o6r-sdk
+    app.kubernetes.io/managed-by: kustomize
+  name: exposedapp-viewer-role
+rules:
+- apiGroups:
+  - stable.o6r-sdk.com
+  resources:
+  - exposedapps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - stable.o6r-sdk.com
+  resources:
+  - exposedapps/status
+  verbs:
+  - get

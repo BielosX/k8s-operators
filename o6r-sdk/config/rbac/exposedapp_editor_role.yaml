@@ -1,0 +1,27 @@
+# permissions for end users to edit exposedapps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: o6r-sdk
+    app.kubernetes.io/managed-by: kustomize
+  name: exposedapp-editor-role
+rules:
+- apiGroups:
+  - stable.o6r-sdk.com
+  resources:
+  - exposedapps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - stable.o6r-sdk.com
+  resources:
+  - exposedapps/status
+  verbs:
+  - get
