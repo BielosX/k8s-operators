@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -53,6 +54,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		deployment.Annotations = make(map[string]string)
 	}
 	deployment.Annotations["kubernetes.io/description"] = "Awesome Deployment!"
+	deployment.Annotations["lastReconcileTimestamp"] = time.Now().Format(time.RFC3339)
 	err = r.Update(ctx, deployment)
 	if err != nil {
 		logger.Error(err, "Unable to update {} deployment", req.NamespacedName)
