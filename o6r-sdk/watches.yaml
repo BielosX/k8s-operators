@@ -5,4 +5,8 @@
   role: exposedapp
   manageStatus: False
   watchDependentResources: True
+  blacklist: # Events are also marked as dependent resources and watched by default
+    - group: ""
+      version: v1
+      kind: Event
 # +kubebuilder:scaffold:watch

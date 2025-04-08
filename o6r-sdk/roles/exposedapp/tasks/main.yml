@@ -41,7 +41,7 @@
 - name: Publish Deployment Provisioned Event
   k8s_event:
     state: present
-    name: '{{ deployment_name }}-provisioned-event-{{ now() }}'
+    name: '{{ deployment_name }}-provisioned-event'
     namespace: '{{ ansible_operator_meta.namespace }}'
     message: "Deployment provisioned"
     reason: "Deployment provisioning requested"
@@ -85,7 +85,7 @@
 - name: Publish Service Provisioned Event
   k8s_event:
     state: present
-    name: '{{ service_name }}-provisioned-event-{{ now() }}'
+    name: '{{ service_name }}-provisioned-event'
     namespace: '{{ ansible_operator_meta.namespace }}'
     message: "Service provisioned"
     reason: "Service provisioning requested"
