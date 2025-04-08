@@ -19,8 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
@@ -177,9 +175,9 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{
-		RequeueAfter: time.Second * 2,
-	}, nil
+	// RequeueAfter not required here as Deployment is a dependent resource and this controller watches for changes
+	// RequeueAfter might be useful for managing external resources, like AWS ALB to poll the status
+	return ctrl.Result{}, nil
 }
 
 func (r *ExposedAppReconciler) InitStatus(ctx context.Context, exposedApp *stablev1.ExposedApp) error {
