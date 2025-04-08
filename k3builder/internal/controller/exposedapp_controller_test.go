@@ -18,11 +18,10 @@ package controller
 
 import (
 	"context"
-	"time"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -85,12 +84,13 @@ var _ = Describe("ExposedApp Controller", func() {
 		AfterEach(func() {
 			resource := &stablev1.ExposedApp{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+			if err == nil {
+				By("Cleanup the specific resource instance ExposedApp")
+				Expect(k8sClient.Delete(ctx, resource, &client.DeleteOptions{
+					PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
+				})).To(Succeed())
+			}
 
-			By("Cleanup the specific resource instance ExposedApp")
-			Expect(k8sClient.Delete(ctx, resource, &client.DeleteOptions{
-				PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
-			})).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
@@ -163,26 +163,32 @@ var _ = Describe("ExposedApp Controller", func() {
 				Name:      resource.Status.ServiceName,
 			}
 			err = k8sClient.Get(ctx, serviceNamespacedName, service)
+			Expect(err).NotTo(HaveOccurred())
 			deployment := &appsv1.Deployment{}
 			deploymentNamespaceName := types.NamespacedName{
 				Namespace: typeNamespacedName.Namespace,
 				Name:      resource.Status.DeploymentName,
 			}
 			err = k8sClient.Get(ctx, deploymentNamespaceName, deployment)
+			Expect(err).NotTo(HaveOccurred())
 
-			err = k8sClient.Delete(ctx, resource)
+			err = k8sClient.Delete(ctx, resource, &client.DeleteOptions{
+				PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
+			})
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
 				service := &corev1.Service{}
 				err := k8sClient.Get(ctx, serviceNamespacedName, service)
+				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}, 20*time.Second)
+			}).WithTimeout(20 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 			Eventually(func(g Gomega) {
 				deployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, deploymentNamespaceName, deployment)
+				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}, 20*time.Second)
+			}).WithTimeout(20 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
 		})
 	})
 })

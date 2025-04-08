@@ -47,6 +47,7 @@ type ExposedAppStatus struct {
 	DeploymentName string `json:"deploymentName,omitempty"`
 	ServiceName    string `json:"serviceName,omitempty"`
 	LastUpdateBy   string `json:"lastUpdateBy,omitempty"`
+	Ready          string `json:"ready,omitempty"`
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
@@ -56,6 +57,7 @@ type ExposedAppStatus struct {
 // +kubebuilder:printcolumn:name="Deployment",type="string",JSONPath=".status.deploymentName"
 // +kubebuilder:printcolumn:name="Service",type="string",JSONPath=".status.serviceName"
 // +kubebuilder:printcolumn:name="Last Update By",type="string",JSONPath=".status.lastUpdateBy"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready"
 
 // ExposedApp is the Schema for the exposedapps API.
 type ExposedApp struct {

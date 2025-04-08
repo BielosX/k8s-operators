@@ -24,6 +24,9 @@ spec:
     - jsonPath: .status.lastUpdateBy
       name: Last Update By
       type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
@@ -143,6 +146,8 @@ spec:
               deploymentName:
                 type: string
               lastUpdateBy:
+                type: string
+              ready:
                 type: string
               serviceName:
                 type: string

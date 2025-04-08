@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -163,6 +164,7 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	exposedApp.Status.ServiceName = serviceName
 	exposedApp.Status.DeploymentName = deploymentName
 	exposedApp.Status.LastUpdateBy = r.PodName
+	exposedApp.Status.Ready = fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, deployment.Status.ReadyReplicas)
 	meta.SetStatusCondition(&exposedApp.Status.Conditions, metav1.Condition{
 		Status:  metav1.ConditionTrue,
 		Reason:  "Provisioned",
@@ -175,7 +177,9 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{
+		RequeueAfter: time.Second * 2,
+	}, nil
 }
 
 func (r *ExposedAppReconciler) InitStatus(ctx context.Context, exposedApp *stablev1.ExposedApp) error {
