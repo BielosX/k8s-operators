@@ -57,6 +57,28 @@ spec:
                 type: string
               serviceName:
                 type: string
+              conditions:
+                type: array
+                items:
+                  properties:
+                    type:
+                      type: string
+                    reason:
+                      type: string
+                    message:
+                      type: string
+                    status:
+                      enum:
+                        - "True"
+                        - "False"
+                        - "Unknown"
+                      type: string
+                  required:
+                    - message
+                    - reason
+                    - status
+                    - type
+                  type: object
         type: object
     served: true
     storage: true

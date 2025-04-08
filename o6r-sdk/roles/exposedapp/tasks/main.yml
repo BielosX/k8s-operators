@@ -30,6 +30,11 @@
     api_version: "stable.o6r-sdk.com/v1"
     name: '{{ ansible_operator_meta.name }}'
     namespace: '{{ ansible_operator_meta.namespace }}'
+    conditions:
+      - type: "DeploymentReady"
+        reason: "Provisioned"
+        message: "Deployment ready"
+        status: "True"
     status:
       deploymentName: '{{ deployment_name }}'
 # https://github.com/operator-framework/operator-sdk-ansible-util/issues/49#issuecomment-1786207059
@@ -70,6 +75,11 @@
     api_version: "stable.o6r-sdk.com/v1"
     name: '{{ ansible_operator_meta.name }}'
     namespace: '{{ ansible_operator_meta.namespace }}'
+    conditions:
+      - type: "ServiceReady"
+        reason: "Provisioned"
+        message: "Service ready"
+        status: "True"
     status:
       serviceName: '{{ service_name }}'
 - name: Publish Service Provisioned Event
