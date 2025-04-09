@@ -7,10 +7,11 @@ pub mod operator {
     use futures::{pin_mut, StreamExt};
     use serde::de::DeserializeOwned;
     use std::ops::Mul;
+    use std::sync::Arc;
     use std::time::Duration;
     use tokio::select;
-    use tokio::sync::mpsc;
     use tokio::sync::mpsc::{Receiver, Sender};
+    use tokio::sync::{mpsc, Notify};
     use tokio::time::sleep;
     use tokio_util::time::DelayQueue;
     use tracing::{error, info, warn};
@@ -19,18 +20,18 @@ pub mod operator {
     const ALL_SERVICES_LIST: &str = "api/v1/services";
     const KUBE_CONTROLLER_MANAGER: &str = "kube-controller-manager";
 
-    pub async fn elect_leader(pod_id: String, is_leader_sender: mpsc::Sender<()>) {
+    pub async fn elect_leader(pod_id: String, is_leader_sender: Arc<Notify>) {
         let mut leader_elector =
             LeaderElector::new(K8sClient::new().await, pod_id.as_str(), is_leader_sender);
         leader_elector.elect_leader().await;
     }
 
-    pub async fn handle_owned_resources(mut receiver: Receiver<()>, pod_name: String) {
-        receiver.recv().await.unwrap();
+    pub async fn handle_owned_resources(notify: Arc<Notify>, pod_name: String) {
+        notify.notified().await;
         info!("Started doing operator stuff");
         let (app_sender, app_receiver): (
-            mpsc::Sender<K8sObject<ExposedApp>>,
-            mpsc::Receiver<K8sObject<ExposedApp>>,
+            Sender<K8sObject<ExposedApp>>,
+            Receiver<K8sObject<ExposedApp>>,
         ) = mpsc::channel(64);
         let cache = new_cache();
         select! {

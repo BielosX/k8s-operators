@@ -1,8 +1,9 @@
 use crate::k8s_client::client::{K8sClient, K8sClientError};
 use crate::k8s_types::{K8sObject, Lease};
 use crate::offset_date_time_parser::parse;
+use std::sync::Arc;
 use time::{Duration, OffsetDateTime};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::Notify;
 use tokio::time::sleep;
 use tracing::{error, info};
 
@@ -12,11 +13,11 @@ const LEASE_NAMESPACE: &str = "no-library";
 pub struct LeaderElector {
     client: K8sClient,
     pod_id: String,
-    is_leader_sender: Sender<()>,
+    is_leader_sender: Arc<Notify>,
 }
 
 impl LeaderElector {
-    pub fn new(client: K8sClient, pod_id: &str, is_leader_sender: Sender<()>) -> Self {
+    pub fn new(client: K8sClient, pod_id: &str, is_leader_sender: Arc<Notify>) -> Self {
         LeaderElector {
             client,
             pod_id: String::from(pod_id),
@@ -70,7 +71,7 @@ impl LeaderElector {
                 match self.patch_lease(resource_version.as_str(), &now).await {
                     Ok(_) => {
                         info!("Lease acquired, became a leader");
-                        self.is_leader_sender.send(()).await.unwrap();
+                        self.is_leader_sender.notify_one();
                         return;
                     }
                     Err(e) => {
