@@ -66,7 +66,7 @@ pub mod operator {
                     match client.watch_exposed_apps(resource_version.as_str()).await {
                         Ok(stream) => {
                             pin_mut!(stream);
-                            'events: while let Some(event) = stream.next().await {
+                            while let Some(event) = stream.next().await {
                                 info!("Received ExposedApp {:?} event", event.event_type);
                                 let name = event.object.metadata.name.clone().unwrap();
                                 let namespace = event.object.metadata.namespace.clone().unwrap();
@@ -74,14 +74,16 @@ pub mod operator {
                                     NamespacedName::new(name.as_str(), namespace.as_str());
                                 let resource_version =
                                     event.object.metadata.resource_version.clone().unwrap();
-                                let map = cache.lock().await;
-                                if let Some(value) = map.get(&namespaced_name) {
-                                    if resource_version == *value {
-                                        info!(
+                                {
+                                    let map = cache.lock().await;
+                                    if let Some(value) = map.get(&namespaced_name) {
+                                        if resource_version == *value {
+                                            info!(
                                             "ExposedApp {} version {} already handled",
                                             name, resource_version
                                         );
-                                        continue 'events;
+                                            continue;
+                                        }
                                     }
                                 }
                                 info!("Sending reconcile event for {}", name);
@@ -124,7 +126,7 @@ pub mod operator {
                     match client.watch::<T>(uri, resource_version.as_str()).await {
                         Ok(stream) => {
                             pin_mut!(stream);
-                            'events: while let Some(event) = stream.next().await {
+                            while let Some(event) = stream.next().await {
                                 let object_name = event.object.metadata.name.unwrap();
                                 let version =
                                     event.object.metadata.resource_version.clone().unwrap();
@@ -144,7 +146,7 @@ pub mod operator {
                                             "Last update by {}, that's fine. Skip",
                                             KUBE_CONTROLLER_MANAGER
                                         );
-                                        continue 'events;
+                                        continue;
                                     } else {
                                         info!("Last update by {}, should reconcile", manager);
                                     }
@@ -152,18 +154,20 @@ pub mod operator {
                                 let namespace = event.object.metadata.namespace.unwrap();
                                 let namespaced_name =
                                     NamespacedName::new(object_name.as_str(), namespace.as_str());
-                                let map = cache.lock().await;
-                                if let Some(value) = map.get(&namespaced_name) {
-                                    if version == *value {
-                                        info!(
+                                {
+                                    let map = cache.lock().await;
+                                    if let Some(value) = map.get(&namespaced_name) {
+                                        if version == *value {
+                                            info!(
                                             "Object {} version {} already handled",
                                             object_name, version
                                         );
-                                        continue 'events;
+                                            continue;
+                                        }
+                                    } else {
+                                        info!("No {} in cache, skip", object_name);
+                                        continue;
                                     }
-                                } else {
-                                    info!("No {} in cache, skip", object_name);
-                                    continue 'events;
                                 }
                                 info!("Looking for owner references for {}", object_name);
                                 if let Some(references) = event.object.metadata.owner_references {
