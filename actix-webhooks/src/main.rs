@@ -1,21 +1,13 @@
 mod admission_review;
+mod validator;
 
-use crate::admission_review::AdmissionReview;
 use actix_web::middleware::Logger;
-use actix_web::{App, HttpServer, Responder, get, post, web};
+use actix_web::{App, HttpServer, Responder, get};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use tracing::info;
 
 #[get("/healthz")]
 async fn health() -> impl Responder {
     "OK"
-}
-
-#[post("/validate")]
-async fn validate(request: web::Json<AdmissionReview>) -> std::io::Result<impl Responder> {
-    info!("Validating Pod");
-    let uid = request.request.clone().unwrap().uid;
-    Ok(web::Json(AdmissionReview::response(uid.as_str(), true)))
 }
 
 const CERT_DIR: &str = "/etc/ssl/private";
@@ -31,7 +23,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .service(health)
-            .service(validate)
+            .service(validator::validate)
     })
     .bind_openssl(format!("0.0.0.0:{}", port), builder)?
     .run()
