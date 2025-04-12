@@ -1,4 +1,5 @@
 mod admission_review;
+mod modifier;
 mod validator;
 
 use actix_web::middleware::Logger;
@@ -24,6 +25,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .service(health)
             .service(validator::validate)
+            .service(modifier::modify)
     })
     .bind_openssl(format!("0.0.0.0:{}", port), builder)?
     .run()

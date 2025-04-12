@@ -7,3 +7,4 @@ resources:
   - certificate.yaml
   - issuer.yaml
   - validating_webhook_config.yaml
+  - mutating_webhook_config.yaml

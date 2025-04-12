@@ -211,8 +211,10 @@ name = "actix-webhooks"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "base64",
  "openssl",
  "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
