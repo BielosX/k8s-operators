@@ -1,0 +1,24 @@
+timestamp := `date +%s`
+localbin := justfile_directory() + "/bin"
+kustomize := localbin + "/kustomize"
+kustomize-version := "5.6.0"
+kustomize-url := "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+tag := env('TAG', timestamp)
+
+get-kustomize:
+    #!/bin/bash -e
+    mkdir -p "{{localbin}}"
+    cd "{{localbin}}"
+    if ! test -x kustomize || ! {{kustomize}} version | grep -q "{{kustomize-version}}"; then
+        rm -rf "{{kustomize}}"
+        curl -s "{{kustomize-url}}" | bash -s "{{kustomize-version}}"
+    fi
+
+img-build:
+    rm -rf target
+    podman build --tag 'actix-webhooks:{{tag}}' .
+    mkdir -p target
+    podman save -o target/actix-webhooks.tar 'actix-webhooks:{{tag}}'
+
+fmt:
+    cargo fmt
