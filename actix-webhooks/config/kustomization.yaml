@@ -1,0 +1,8 @@
+namePrefix: actix-webhooks-
+namespace: actix-webhooks-system
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - certificate.yaml
+  - issuer.yaml

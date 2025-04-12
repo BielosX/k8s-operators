@@ -20,5 +20,11 @@ img-build:
     mkdir -p target
     podman save -o target/actix-webhooks.tar 'actix-webhooks:{{tag}}'
 
+kind-load: img-build
+    kind load image-archive target/actix-webhooks.tar
+
+k8s-apply: get-kustomize kind-load
+    {{kustomize}} build config | IMG="localhost/actix-webhooks:{{tag}}" envsubst | kubectl apply -f -
+
 fmt:
     cargo fmt
