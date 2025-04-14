@@ -1,0 +1,28 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: webhook-conditions-system/webhook-conditions-certificate
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: webhook-conditions-service
+        namespace: webhook-conditions-system
+        path: /validate
+        port: 8080
+    rules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations:
+          - "UPDATE"
+        resources: ["deployments"]
+        scope: "Namespaced"
+    name: validate.webhook-conditions.com
+    matchConditions:
+      - name: 'immutable'
+        expression: '"immutable" in oldObject.metadata.annotations'
+    timeoutSeconds: 10
+    sideEffects: None

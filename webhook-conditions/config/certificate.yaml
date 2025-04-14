@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: certificate
+  namespace: system
+spec:
+  secretName: app-certificate
+  issuerRef:
+    name: webhook-conditions-ca-issuer
+    kind: Issuer
+  dnsNames:
+    - webhook-conditions-service.webhook-conditions-system.svc

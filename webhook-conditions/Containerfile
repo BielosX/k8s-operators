@@ -1,0 +1,12 @@
+FROM golang:alpine as builder
+
+COPY . /workspace
+WORKDIR /workspace
+
+RUN go build -o bin/main
+
+FROM alpine
+RUN adduser -u 1001 -s /bin/bash -D webhook-conditions
+COPY --from=builder /workspace/bin/main /bin/main
+USER 1001
+CMD ["/bin/main"]

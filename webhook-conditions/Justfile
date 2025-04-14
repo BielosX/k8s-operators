@@ -1,0 +1,34 @@
+timestamp := `date +%s`
+localbin := justfile_directory() + "/bin"
+kustomize := localbin + "/kustomize"
+kustomize-version := "5.6.0"
+kustomize-url := "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+tag := env('TAG', timestamp)
+
+get-kustomize:
+    #!/bin/bash -e
+    mkdir -p "{{localbin}}"
+    cd "{{localbin}}"
+    if ! test -x kustomize || ! {{kustomize}} version | grep -q "{{kustomize-version}}"; then
+        rm -rf "{{kustomize}}"
+        curl -s "{{kustomize-url}}" | bash -s "{{kustomize-version}}"
+    fi
+
+build:
+    mkdir -p target
+    go build -o target/main
+
+fmt:
+    golangci-lint fmt
+
+img-build:
+    rm -rf target
+    podman build --tag 'webhook-conditions:{{tag}}' .
+    mkdir -p target
+    podman save -o target/webhook-conditions.tar 'webhook-conditions:{{tag}}'
+
+kind-load: img-build
+    kind load image-archive target/webhook-conditions.tar
+
+k8s-apply: get-kustomize kind-load
+    {{kustomize}} build config | IMG="localhost/webhook-conditions:{{tag}}" envsubst | kubectl apply -f -

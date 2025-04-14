@@ -1,0 +1,9 @@
+namePrefix: webhook-conditions-
+namespace: webhook-conditions-system
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - certificate.yaml
+  - issuer.yaml
+  - validating_webhook_config.yaml
