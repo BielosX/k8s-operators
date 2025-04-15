@@ -43,7 +43,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./..."
+	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

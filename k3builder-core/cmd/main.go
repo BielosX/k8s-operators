@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/BielosX/k8s-operators/k3builder-core/internal/controller"
+	webhookappsv1 "github.com/BielosX/k8s-operators/k3builder-core/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -213,6 +214,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployment")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookappsv1.SetupDeploymentWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Deployment")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
