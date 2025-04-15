@@ -98,18 +98,18 @@ func main() {
 	if err == nil {
 		slog.Info(fmt.Sprintf("Listening on port %d", port))
 	} else {
-		slog.Error(fmt.Sprintf("Unable to listen on port %d", port))
+		slog.Error(fmt.Sprintf("Unable to listen on port %d", port), "error", err)
 	}
 	if len(certFile) == 0 || len(keyFile) == 0 {
 		err = http.Serve(listener, nil)
 		if err != nil {
-			slog.Error("Unable to serve HTTP traffic")
+			slog.Error("Unable to serve HTTP traffic", "error", err)
 		}
 	} else {
 		slog.Info(fmt.Sprintf("Using CertFile %s, KeyFile %s", certFile, keyFile))
 		err = http.ServeTLS(listener, nil, certFile, keyFile)
 		if err != nil {
-			slog.Error("Unable to serve HTTPS traffic")
+			slog.Error("Unable to serve HTTPS traffic", "error", err)
 		}
 	}
 }
