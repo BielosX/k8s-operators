@@ -20,6 +20,11 @@ spec:
       containers:
         - name: main
           image: "${IMG}"
+          env:
+            - name: CERT_FILE
+              value: /etc/ssl/private/tls.crt
+            - name: KEY_FILE
+              value: /etc/ssl/private/tls.key
           volumeMounts:
             - mountPath: /etc/ssl/private
               name: certificate

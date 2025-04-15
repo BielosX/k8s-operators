@@ -83,14 +83,13 @@ func health(writer http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-const CertFile = "/etc/ssl/private/tls.crt"
-const KeyFile = "/etc/ssl/private/tls.key"
-
 func main() {
 	port, err := strconv.ParseUint(os.Getenv("PORT"), 10, 16)
 	if err != nil {
 		port = 8080
 	}
+	certFile := os.Getenv("CERT_FILE")
+	keyFile := os.Getenv("KEY_FILE")
 
 	handleFunc("/validate", validate)
 	handleFunc("/healthz", health)
@@ -101,8 +100,16 @@ func main() {
 	} else {
 		slog.Error(fmt.Sprintf("Unable to listen on port %d", port))
 	}
-	err = http.ServeTLS(listener, nil, CertFile, KeyFile)
-	if err != nil {
-		slog.Error("Unable to serve HTTP traffic")
+	if len(certFile) == 0 || len(keyFile) == 0 {
+		err = http.Serve(listener, nil)
+		if err != nil {
+			slog.Error("Unable to serve HTTP traffic")
+		}
+	} else {
+		slog.Info(fmt.Sprintf("Using CertFile %s, KeyFile %s", certFile, keyFile))
+		err = http.ServeTLS(listener, nil, certFile, keyFile)
+		if err != nil {
+			slog.Error("Unable to serve HTTPS traffic")
+		}
 	}
 }
