@@ -59,7 +59,7 @@ func validate(w http.ResponseWriter, r *http.Request) {
 			review.Response.Allowed = false
 			review.Response.Result = &metav1.Status{
 				Code:    400,
-				Message: "Deployment marked as Immutable, unable to Update. Delete first, then recreated",
+				Message: "Deployment marked as Immutable, unable to Update. Delete first, then recreate",
 			}
 		}
 	}
