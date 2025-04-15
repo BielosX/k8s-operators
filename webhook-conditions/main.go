@@ -58,7 +58,7 @@ func validate(w http.ResponseWriter, r *http.Request) {
 			slog.Info("Deployment marked as immutable")
 			review.Response.Allowed = false
 			review.Response.Result = &metav1.Status{
-				Code:    400,
+				Code:    http.StatusBadRequest,
 				Message: "Deployment marked as Immutable, unable to Update. Delete first, then recreate",
 			}
 		}
