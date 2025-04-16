@@ -23,10 +23,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 )
 
-func Int32(value int32) *int32 {
-	return &value
-}
-
 var _ = Describe("Deployment Webhook", func() {
 	var (
 		obj       *appsv1.Deployment
@@ -64,8 +60,9 @@ var _ = Describe("Deployment Webhook", func() {
 	Context("When creating or updating Deployment under Validating Webhook", func() {
 		It("Should validate updates correctly", func() {
 			By("simulating a valid update scenario")
-			oldObj.Spec.Replicas = Int32(2)
-			obj.Spec.Replicas = Int32(3)
+			asInt32Ptr := func(value int32) *int32 { return &value }
+			oldObj.Spec.Replicas = asInt32Ptr(2)
+			obj.Spec.Replicas = asInt32Ptr(3)
 			Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
 		})
 		It("Should reject immutable Deployment", func() {
