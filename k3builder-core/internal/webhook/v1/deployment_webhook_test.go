@@ -21,8 +21,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
-	// TODO (user): Add any additional imports if needed
 )
+
+func Int32(value int32) *int32 {
+	return &value
+}
 
 var _ = Describe("Deployment Webhook", func() {
 	var (
@@ -41,47 +44,37 @@ var _ = Describe("Deployment Webhook", func() {
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
 	})
 
 	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
+		oldObj.Annotations = nil
 	})
 
 	Context("When creating Deployment under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		It("Should apply defaults when a required field is empty", func() {
+			By("simulating a scenario where defaults should be applied")
+			obj.Annotations = nil
+			By("calling the Default method to apply defaults")
+			_ = defaulter.Default(ctx, obj)
+			By("checking that the default values are set")
+			Expect(obj.Annotations).To(HaveKeyWithValue("kubernetes.io/description", "Mutated by Default Webhook"))
+		})
 	})
 
 	Context("When creating or updating Deployment under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
+		It("Should validate updates correctly", func() {
+			By("simulating a valid update scenario")
+			oldObj.Spec.Replicas = Int32(2)
+			obj.Spec.Replicas = Int32(3)
+			Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
+		})
+		It("Should reject immutable Deployment", func() {
+			By("simulating an update with annotation immutable=true")
+			oldObj.Annotations = make(map[string]string)
+			oldObj.Annotations["immutable"] = "true"
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).Should(HaveOccurred())
+		})
 	})
 
 })
