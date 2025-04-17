@@ -4,9 +4,10 @@ COPY . /workspace
 WORKDIR /workspace
 
 RUN go build -o bin/main
-
-FROM alpine
 RUN adduser -u 1001 -s /bin/bash -D webhook-conditions
+
+FROM scratch
 COPY --from=builder /workspace/bin/main /bin/main
+COPY --from=builder /etc/passwd /etc/passwd
 USER 1001
 CMD ["/bin/main"]
