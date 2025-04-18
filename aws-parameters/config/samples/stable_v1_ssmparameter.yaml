@@ -1,0 +1,9 @@
+apiVersion: stable.aws.parameters.com/v1
+kind: SsmParameter
+metadata:
+  labels:
+    app.kubernetes.io/name: aws-parameters
+    app.kubernetes.io/managed-by: kustomize
+  name: ssmparameter-sample
+spec:
+  # TODO(user): Add fields here
