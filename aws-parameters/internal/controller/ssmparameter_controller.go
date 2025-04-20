@@ -57,10 +57,11 @@ func getParameterName(ssmParameter *stablev1.SsmParameter) string {
 }
 
 func (r *SsmParameterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var err error
 	logger := logf.FromContext(ctx)
 
 	ssmParameter := &stablev1.SsmParameter{}
-	err := r.Get(ctx, req.NamespacedName, ssmParameter)
+	err = r.Get(ctx, req.NamespacedName, ssmParameter)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			logger.Info("SsmParameter not found, probably deleted", req.NamespacedName)
@@ -83,6 +84,7 @@ func (r *SsmParameterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 func (r *SsmParameterReconciler) manageExternalResource(ctx context.Context,
 	ssmParameter *stablev1.SsmParameter) (ctrl.Result, error) {
+	var err error
 	logger := logf.FromContext(ctx)
 
 	result, err := r.ParamApi.PutParameter(ctx, &ssm.PutParameterInput{
@@ -109,6 +111,7 @@ func (r *SsmParameterReconciler) manageExternalResource(ctx context.Context,
 const finalizer = "aws.parameters.com/finalizer"
 
 func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParameter *stablev1.SsmParameter) (bool, error) {
+	var err error
 	logger := logf.FromContext(ctx)
 	namespacedName := types.NamespacedName{
 		Namespace: ssmParameter.Namespace,
@@ -118,7 +121,7 @@ func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParamet
 	if ssmParameter.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ssmParameter, finalizer) {
 			controllerutil.AddFinalizer(ssmParameter, finalizer)
-			err := r.Update(ctx, ssmParameter)
+			err = r.Update(ctx, ssmParameter)
 			if err != nil {
 				logger.Error(err, "Unable to update SsmParameter", namespacedName)
 				return false, err
@@ -126,7 +129,7 @@ func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParamet
 		}
 	} else {
 		if controllerutil.ContainsFinalizer(ssmParameter, finalizer) {
-			err := r.deleteExternalResources(ctx, ssmParameter)
+			err = r.deleteExternalResources(ctx, ssmParameter)
 			if err != nil {
 				logger.Error(err, "Failed to delete external resources", namespacedName)
 				return false, err
@@ -145,9 +148,10 @@ func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParamet
 
 func (r *SsmParameterReconciler) deleteExternalResources(context context.Context,
 	ssmParameter *stablev1.SsmParameter) error {
+	var err error
 	logger := logf.FromContext(context)
 
-	_, err := r.ParamApi.DeleteParameter(context, &ssm.DeleteParameterInput{
+	_, err = r.ParamApi.DeleteParameter(context, &ssm.DeleteParameterInput{
 		Name: aws.String(getParameterName(ssmParameter)),
 	})
 	if err != nil {
