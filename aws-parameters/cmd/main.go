@@ -212,10 +212,13 @@ func main() {
 	}
 	ssmClient := ssm.NewFromConfig(cfg)
 
+	prefix := os.Getenv("PATH_PREFIX")
+
 	if err = (&controller.SsmParameterReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		ParamApi: ssmClient,
+		Prefix:   prefix,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SsmParameter")
 		os.Exit(1)

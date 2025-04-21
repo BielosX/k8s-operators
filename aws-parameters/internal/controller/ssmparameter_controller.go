@@ -46,14 +46,15 @@ type SsmParameterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	ParamApi SsmParameterAPI
+	Prefix   string
 }
 
 // +kubebuilder:rbac:groups=stable.aws.parameters.com,resources=ssmparameters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=stable.aws.parameters.com,resources=ssmparameters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=stable.aws.parameters.com,resources=ssmparameters/finalizers,verbs=update
 
-func getParameterName(ssmParameter *stablev1.SsmParameter) string {
-	return fmt.Sprintf("/%s/%s", ssmParameter.Namespace, ssmParameter.Name)
+func (r *SsmParameterReconciler) getParameterName(ssmParameter *stablev1.SsmParameter) string {
+	return fmt.Sprintf("%s/%s/%s", r.Prefix, ssmParameter.Namespace, ssmParameter.Name)
 }
 
 func (r *SsmParameterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -64,10 +65,10 @@ func (r *SsmParameterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	err = r.Get(ctx, req.NamespacedName, ssmParameter)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			logger.Info("SsmParameter not found, probably deleted", req.NamespacedName)
+			logger.Info("SsmParameter not found, probably deleted", "namespacedName", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Unable to load SsmParameter", req.NamespacedName)
+		logger.Error(err, "Unable to load SsmParameter", "namespacedName", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 
@@ -88,7 +89,7 @@ func (r *SsmParameterReconciler) manageExternalResource(ctx context.Context,
 	logger := logf.FromContext(ctx)
 
 	result, err := r.ParamApi.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(getParameterName(ssmParameter)),
+		Name:        aws.String(r.getParameterName(ssmParameter)),
 		Description: &ssmParameter.Spec.Description,
 		Overwrite:   aws.Bool(true),
 		Value:       &ssmParameter.Spec.Value,
@@ -101,7 +102,7 @@ func (r *SsmParameterReconciler) manageExternalResource(ctx context.Context,
 	ssmParameter.Status.Version = result.Version
 	err = r.Status().Update(ctx, ssmParameter)
 	if err != nil {
-		logger.Error(err, "Unable to update SsmParameter status", ssmParameter.Name, ssmParameter.Namespace)
+		logger.Error(err, "Unable to update SsmParameter status", "name", ssmParameter.Name, "namespace", ssmParameter.Namespace)
 		return ctrl.Result{}, err
 	}
 
@@ -123,7 +124,7 @@ func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParamet
 			controllerutil.AddFinalizer(ssmParameter, finalizer)
 			err = r.Update(ctx, ssmParameter)
 			if err != nil {
-				logger.Error(err, "Unable to update SsmParameter", namespacedName)
+				logger.Error(err, "Unable to update SsmParameter", "namespacedName", namespacedName)
 				return false, err
 			}
 		}
@@ -131,13 +132,13 @@ func (r *SsmParameterReconciler) handleFinalizer(ctx context.Context, ssmParamet
 		if controllerutil.ContainsFinalizer(ssmParameter, finalizer) {
 			err = r.deleteExternalResources(ctx, ssmParameter)
 			if err != nil {
-				logger.Error(err, "Failed to delete external resources", namespacedName)
+				logger.Error(err, "Failed to delete external resources", "namespacedName", namespacedName)
 				return false, err
 			}
 			controllerutil.RemoveFinalizer(ssmParameter, finalizer)
 			err = r.Update(ctx, ssmParameter)
 			if err != nil {
-				logger.Error(err, "Unable to update SsmParameter", namespacedName)
+				logger.Error(err, "Unable to update SsmParameter", "namespacedName", namespacedName)
 				return false, err
 			}
 			return true, nil
@@ -152,7 +153,7 @@ func (r *SsmParameterReconciler) deleteExternalResources(context context.Context
 	logger := logf.FromContext(context)
 
 	_, err = r.ParamApi.DeleteParameter(context, &ssm.DeleteParameterInput{
-		Name: aws.String(getParameterName(ssmParameter)),
+		Name: aws.String(r.getParameterName(ssmParameter)),
 	})
 	if err != nil {
 		var notFound *ssmtypes.ParameterNotFound

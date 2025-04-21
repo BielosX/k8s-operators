@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	stablev1 "k3builder.com/aws-parameters/api/v1"
@@ -54,27 +53,26 @@ var _ = Describe("SsmParameter Controller", func() {
 			Name:      resourceName,
 			Namespace: "default",
 		}
-		ssmParameter := &stablev1.SsmParameter{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      typeNamespacedName.Name,
-				Namespace: typeNamespacedName.Namespace,
-			},
-			Spec: stablev1.SsmParameterSpec{
-				Description: "Demo Parameter",
-				Value:       "Some Value",
-			},
-		}
 
 		ssmMock := &MockSsmParameterAPI{}
 
 		var reconciler SsmParameterReconciler
+		var ssmParameter *stablev1.SsmParameter
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind SsmParameter")
-			err := k8sClient.Get(ctx, typeNamespacedName, ssmParameter)
-			if err != nil && errors.IsNotFound(err) {
-				Expect(k8sClient.Create(ctx, ssmParameter)).To(Succeed())
+			ssmParameter = &stablev1.SsmParameter{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      typeNamespacedName.Name,
+					Namespace: typeNamespacedName.Namespace,
+				},
+				Spec: stablev1.SsmParameterSpec{
+					Description: "Demo Parameter",
+					Value:       "Some Value",
+				},
 			}
+			By("creating the custom resource for the Kind SsmParameter")
+			Expect(k8sClient.Create(ctx, ssmParameter)).To(Succeed())
+
 			ssmMock.DeleteParameterMock = func(_ *ssm.DeleteParameterInput) (*ssm.DeleteParameterOutput, error) {
 				return &ssm.DeleteParameterOutput{}, nil
 			}
@@ -92,6 +90,9 @@ var _ = Describe("SsmParameter Controller", func() {
 		AfterEach(func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, ssmParameter)
 			if err == nil {
+				By("Remove SsmParameter finalizers")
+				ssmParameter.Finalizers = []string{}
+				Expect(k8sClient.Update(ctx, ssmParameter)).To(Succeed())
 				By("Cleanup the specific resource instance SsmParameter")
 				Expect(k8sClient.Delete(ctx, ssmParameter)).To(Succeed())
 			}
@@ -107,21 +108,60 @@ var _ = Describe("SsmParameter Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, ssmParameter)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ssmParameter.Status.Version).To(Equal(int64(1)))
+			Expect(ssmParameter.Finalizers).To(ContainElement("aws.parameters.com/finalizer"))
 		})
 
 		It("should successfully reconcile when external resource already deleted", func() {
 			ssmMock.DeleteParameterMock = func(_ *ssm.DeleteParameterInput) (*ssm.DeleteParameterOutput, error) {
 				return nil, &ssmtypes.ParameterNotFound{}
 			}
-			By("Setting DeletionTimestamp on object with finalizer")
-			deletionTime := metav1.Now()
-			ssmParameter.ObjectMeta.DeletionTimestamp = &deletionTime
-			controllerutil.AddFinalizer(ssmParameter, "aws.parameters.com/finalizer")
-			err := k8sClient.Update(ctx, ssmParameter)
-			Expect(err).NotTo(HaveOccurred())
+			By("Setting finalizer")
+			ssmParameter.Finalizers = []string{"aws.parameters.com/finalizer"}
+			Expect(k8sClient.Update(ctx, ssmParameter)).To(Succeed())
+			By("Deleting object with finalizers")
+			Expect(k8sClient.Delete(ctx, ssmParameter)).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, ssmParameter)).To(Succeed())
+			Expect(ssmParameter.DeletionTimestamp).ToNot(BeNil())
 
 			By("Reconciling the created resource")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should remove finalizer on deletion", func() {
+			By("Reconciling the created resource")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, ssmParameter)).To(Succeed())
+			Expect(ssmParameter.Finalizers).To(ContainElement("aws.parameters.com/finalizer"))
+
+			Expect(k8sClient.Delete(ctx, ssmParameter)).To(Succeed())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, ssmParameter)).To(Succeed())
+			Expect(ssmParameter.DeletionTimestamp).ToNot(BeNil())
+
+			By("Reconciling the deleted resource")
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			err = k8sClient.Get(ctx, typeNamespacedName, ssmParameter)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("should use name prefix when provided", func() {
+			reconciler.Prefix = "/prefix"
+			ssmMock.PutParameterMock = func(input *ssm.PutParameterInput) (*ssm.PutParameterOutput, error) {
+				Expect(*input.Name).To(Equal("/prefix/default/test-resource"))
+				return &ssm.PutParameterOutput{Tier: ssmtypes.ParameterTierStandard, Version: 1}, nil
+			}
+
+			By("Reconciling the created resource")
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
