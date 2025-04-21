@@ -1,5 +1,6 @@
 cert-manager-version := "v1.17.1"
 prometheus-operator-version := "v0.82.0"
+grafana-operator-version := "v5.17.1"
 
 
 create-cluster:
@@ -11,9 +12,13 @@ install-cert-manager:
 
 install-prometheus-operator:
     curl -sL 'https://github.com/prometheus-operator/prometheus-operator/releases/download/{{ prometheus-operator-version }}/bundle.yaml' | kubectl create -f -
-    kubectl wait --for=condition=Ready pods -l  app.kubernetes.io/name=prometheus-operator
+    kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=prometheus-operator
 
-setup-cluster: create-cluster install-cert-manager install-prometheus-operator
+install-grafana-operator:
+    kubectl create -f 'https://github.com/grafana/grafana-operator/releases/download/{{ grafana-operator-version }}/kustomize-cluster_scoped.yaml'
+    kubectl wait --for=condition=Ready pods -n grafana -l app.kubernetes.io/name=grafana-operator
+
+setup-cluster: create-cluster install-cert-manager install-prometheus-operator install-grafana-operator
 
 delete-cluster:
     kind delete cluster
