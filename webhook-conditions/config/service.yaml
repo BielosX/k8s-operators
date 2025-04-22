@@ -3,9 +3,12 @@ kind: Service
 metadata:
   name: service
   namespace: system
+  labels:
+    app.kubernetes.io/instance: webhook-conditions
 spec:
   selector:
     app.kubernetes.io/instance: webhook-conditions
   ports:
     - port: 8080
       targetPort: 8080
+      name: "main"

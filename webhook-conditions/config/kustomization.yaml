@@ -1,9 +1,44 @@
 namePrefix: webhook-conditions-
 namespace: webhook-conditions-system
+replacements:
+  - source:
+      kind: Certificate
+      name: webhook-conditions-certificate
+      fieldPath: spec.dnsNames.0
+    targets:
+      - select:
+          kind: ServiceMonitor
+          name: webhook-conditions-service-monitor
+        fieldPaths:
+          - spec.endpoints.0.tlsConfig.serverName
+  - source:
+      kind: Secret
+      name: webhook-conditions-app-certificate
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Deployment
+          name: webhook-conditions-deployment
+        fieldPaths:
+          - spec.template.spec.volumes.0.secret.secretName
+      - select:
+          kind: Certificate
+          name: webhook-conditions-certificate
+        fieldPaths:
+          - spec.secretName
+      - select:
+          kind: ServiceMonitor
+          name: webhook-conditions-service-monitor
+        fieldPaths:
+          - spec.endpoints.0.tlsConfig.ca.secret.name
+          - spec.endpoints.0.tlsConfig.cert.secret.name
+          - spec.endpoints.0.tlsConfig.keySecret.name
 resources:
   - namespace.yaml
+  - secret.yaml
   - deployment.yaml
   - service.yaml
   - certificate.yaml
   - issuer.yaml
   - validating_webhook_config.yaml
+  - service_monitor.yaml

@@ -16,7 +16,7 @@ spec:
       volumes:
         - name: certificate
           secret:
-            secretName: app-certificate
+            secretName: SECRET_NAME
       containers:
         - name: main
           image: "${IMG}"

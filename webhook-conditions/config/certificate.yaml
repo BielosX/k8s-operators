@@ -4,7 +4,7 @@ metadata:
   name: certificate
   namespace: system
 spec:
-  secretName: app-certificate
+  secretName: SECRET_NAME
   issuerRef:
     name: webhook-conditions-ca-issuer
     kind: Issuer

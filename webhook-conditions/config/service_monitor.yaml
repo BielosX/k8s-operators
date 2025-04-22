@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: service-monitor
+  namespace: system
+spec:
+  namespaceSelector:
+    matchNames:
+      - webhook-conditions-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: webhook-conditions
+  endpoints:
+    - path: "/metrics"
+      scheme: "https"
+      port: main
+      interval: "10s"
+      tlsConfig:
+        serverName: SERVER_NAME # SUPER IMPORTANT!!!!
+        ca:
+          secret:
+            name: SECRET_NAME
+            key: ca.crt
+        cert:
+          secret:
+            name: SECRET_NAME
+            key: tls.crt
+        keySecret:
+          name: SECRET_NAME
+          key: tls.key
