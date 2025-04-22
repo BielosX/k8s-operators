@@ -1,4 +1,5 @@
 resources:
+- secret.yaml
 - issuer.yaml
 - certificate-webhook.yaml
 - certificate-metrics.yaml

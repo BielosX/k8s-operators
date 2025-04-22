@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,7 +42,7 @@ func SetupDeploymentWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-apps-v1-deployment,mutating=true,failurePolicy=fail,sideEffects=None,groups=apps,resources=deployments,verbs=create;update,versions=v1,name=mdeployment-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-apps-v1-deployment,mutating=true,failurePolicy=fail,sideEffects=None,groups=apps,resources=deployments,verbs=create,versions=v1,name=mdeployment-v1.kb.io,admissionReviewVersions=v1
 
 // DeploymentCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind Deployment when those are created or updated.
@@ -51,9 +53,15 @@ type DeploymentCustomDefaulter struct{}
 
 var _ webhook.CustomDefaulter = &DeploymentCustomDefaulter{}
 
+var defaultCalls = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "k3builder_core_default_calls",
+	Help: "Total number of Default func calls",
+})
+
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Deployment.
 func (d *DeploymentCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
 	deployment, ok := obj.(*appsv1.Deployment)
+	defaultCalls.Inc()
 
 	if !ok {
 		return fmt.Errorf("expected an Deployment object but got %T", obj)
@@ -86,9 +94,15 @@ func (v *DeploymentCustomValidator) ValidateCreate(_ context.Context, _ runtime.
 	return nil, nil
 }
 
+var validateUpdateCalls = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "k3builder_core_validate_update_calls",
+	Help: "Total number of ValidateUpdate calls",
+})
+
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Deployment.
 func (v *DeploymentCustomValidator) ValidateUpdate(_ context.Context, oldObj, _ runtime.Object) (admission.Warnings, error) {
 	deployment, ok := oldObj.(*appsv1.Deployment)
+	validateUpdateCalls.Inc()
 	if !ok {
 		return nil, fmt.Errorf("expected a Deployment object for the oldObj but got %T", oldObj)
 	}

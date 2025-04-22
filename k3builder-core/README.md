@@ -7,8 +7,6 @@
 Commands used to generate this project:
 ```shell
 kubebuilder init --domain "" --repo github.com/BielosX/k8s-operators/k3builder-core
-kubebuilder create api --version v1 --kind Pod --controller --group core --resource=false
-kubebuilder create api --version v1 --kind Deployment --controller --group apps --resource=false
 kubebuilder create webhook --group apps --version v1 --kind Deployment --defaulting --programmatic-validation
 ```
 
