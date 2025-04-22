@@ -8,12 +8,12 @@
     insecureSkipVerify: false
     ca:
       secret:
-        name: k3builder-core-metrics-server-cert
+        name: CERT_SECRET_NAME # will be substituted by kustomize
         key: ca.crt
     cert:
       secret:
-        name: k3builder-core-metrics-server-cert
+        name: CERT_SECRET_NAME
         key: tls.crt
     keySecret:
-      name: k3builder-core-metrics-server-cert
+      name: CERT_SECRET_NAME
       key: tls.key

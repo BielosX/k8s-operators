@@ -16,11 +16,7 @@ install-prometheus-operator:
     kubectl apply -f prometheus.yaml
     kubectl apply -f prometheus_service.yaml
 
-install-grafana-operator:
-    kubectl create -f 'https://github.com/grafana/grafana-operator/releases/download/{{ grafana-operator-version }}/kustomize-cluster_scoped.yaml'
-    kubectl wait --timeout=2m --for=condition=Ready pods -n grafana -l app.kubernetes.io/name=grafana-operator
-
-setup-cluster: create-cluster install-cert-manager install-prometheus-operator install-grafana-operator
+setup-cluster: create-cluster install-cert-manager install-prometheus-operator
 
 delete-cluster:
     kind delete cluster

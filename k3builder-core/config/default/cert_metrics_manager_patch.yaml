@@ -19,7 +19,7 @@
   value:
     name: metrics-certs
     secret:
-      secretName: k3builder-core-metrics-server-cert
+      secretName: CERT_SECRET_NAME
       optional: false
       items:
         - key: ca.crt

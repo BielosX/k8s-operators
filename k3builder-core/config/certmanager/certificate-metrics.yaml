@@ -17,4 +17,4 @@ spec:
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer
-  secretName: k3builder-core-metrics-server-cert
+  secretName: CERT_SECRET_NAME

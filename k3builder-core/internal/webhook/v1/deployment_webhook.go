@@ -21,11 +21,11 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -34,8 +34,20 @@ import (
 // log is for logging in this package.
 var deploymentlog = logf.Log.WithName("deployment-resource")
 
+var (
+	defaultCalls = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "k3builder_core_default_calls",
+		Help: "Total number of Default func calls",
+	})
+	validateUpdateCalls = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "k3builder_core_validate_update_calls",
+		Help: "Total number of ValidateUpdate calls",
+	})
+)
+
 // SetupDeploymentWebhookWithManager registers the webhook for Deployment in the manager.
 func SetupDeploymentWebhookWithManager(mgr ctrl.Manager) error {
+	metrics.Registry.MustRegister(defaultCalls, validateUpdateCalls)
 	return ctrl.NewWebhookManagedBy(mgr).For(&appsv1.Deployment{}).
 		WithValidator(&DeploymentCustomValidator{}).
 		WithDefaulter(&DeploymentCustomDefaulter{}).
@@ -52,11 +64,6 @@ func SetupDeploymentWebhookWithManager(mgr ctrl.Manager) error {
 type DeploymentCustomDefaulter struct{}
 
 var _ webhook.CustomDefaulter = &DeploymentCustomDefaulter{}
-
-var defaultCalls = promauto.NewCounter(prometheus.CounterOpts{
-	Name: "k3builder_core_default_calls",
-	Help: "Total number of Default func calls",
-})
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Deployment.
 func (d *DeploymentCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
@@ -93,11 +100,6 @@ var _ webhook.CustomValidator = &DeploymentCustomValidator{}
 func (v *DeploymentCustomValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
-
-var validateUpdateCalls = promauto.NewCounter(prometheus.CounterOpts{
-	Name: "k3builder_core_validate_update_calls",
-	Help: "Total number of ValidateUpdate calls",
-})
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Deployment.
 func (v *DeploymentCustomValidator) ValidateUpdate(_ context.Context, oldObj, _ runtime.Object) (admission.Warnings, error) {
