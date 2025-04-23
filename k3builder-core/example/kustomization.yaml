@@ -1,0 +1,6 @@
+namePrefix: example-
+namespace: example-namespace
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml

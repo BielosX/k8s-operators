@@ -36,6 +36,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/BielosX/k8s-operators/k3builder-core/internal/controller"
 	webhookappsv1 "github.com/BielosX/k8s-operators/k3builder-core/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -174,6 +175,13 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Deployment")
 			os.Exit(1)
 		}
+	}
+	if err = (&controller.ServiceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Service")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 

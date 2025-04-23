@@ -10,3 +10,6 @@ deploy:
     make manifests docker-build
     kind load docker-image "${IMG}"
     make deploy
+
+example-apply:
+    kustomize build example | kubectl apply -f -
