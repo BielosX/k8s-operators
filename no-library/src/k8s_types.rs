@@ -49,6 +49,7 @@ pub struct ManageFields {
     pub manager: String,
 }
 
+// https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
