@@ -1,4 +1,4 @@
-use crate::cache::{Cache, NamespacedName};
+use crate::cache::{Cache, CacheEntry, NamespacedName};
 use crate::k8s_client::client::{K8sClient, K8sClientError};
 use crate::k8s_types::EventType::Normal;
 use crate::k8s_types::{
@@ -134,7 +134,10 @@ impl Reconciler {
                 info!("Deployment created/updated");
                 map.insert(
                     NamespacedName::new(name, namespace),
-                    result.metadata.resource_version.clone().unwrap(),
+                    CacheEntry::new(
+                        result.metadata.resource_version.clone().unwrap().as_str(),
+                        result.metadata.generation.unwrap(),
+                    ),
                 );
                 Ok(result)
             }
@@ -167,12 +170,18 @@ impl Reconciler {
             },
         };
         let mut map = self.cache.lock().await;
+        /*
+           Service does not provide generation,
+           there’s no controller watching the spec and updating status in a way that would need generation tracking.
+        */
         match self.client.put_service(&service).await {
             Ok(result) => {
                 info!("Service created/updated");
                 map.insert(
                     NamespacedName::new(name, namespace),
-                    result.metadata.resource_version.clone().unwrap(),
+                    CacheEntry::new_no_generation(
+                        result.metadata.resource_version.clone().unwrap().as_str(),
+                    ),
                 );
                 Ok(result)
             }
@@ -263,7 +272,10 @@ impl Reconciler {
                 let namespaced_name = NamespacedName::new(name.as_str(), namespace.as_str());
                 map.insert(
                     namespaced_name,
-                    result.metadata.resource_version.clone().unwrap(),
+                    CacheEntry::new(
+                        result.metadata.resource_version.clone().unwrap().as_str(),
+                        result.metadata.generation.unwrap(),
+                    ),
                 );
             }
             Err(e) => {

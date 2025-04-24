@@ -1,7 +1,9 @@
 pub mod operator {
     use crate::cache::{clone_cache, new_cache, Cache, NamespacedName};
     use crate::k8s_client::client::{K8sClient, K8sClientError};
-    use crate::k8s_types::{Deployment, ExposedApp, K8sObject, Service};
+    use crate::k8s_types::{
+        Deployment, ExposedApp, K8sListObject, K8sObject, MetadataAware, Service,
+    };
     use crate::leader_election::LeaderElector;
     use crate::reconciler::Reconciler;
     use futures::{pin_mut, StreamExt};
@@ -18,7 +20,6 @@ pub mod operator {
 
     const ALL_DEPLOYMENTS_LIST: &str = "apis/apps/v1/deployments";
     const ALL_SERVICES_LIST: &str = "api/v1/services";
-    const KUBE_CONTROLLER_MANAGER: &str = "kube-controller-manager";
 
     pub async fn elect_leader(pod_id: String, is_leader_sender: Arc<Notify>) {
         let mut leader_elector =
@@ -53,6 +54,34 @@ pub mod operator {
         }
     }
 
+    async fn can_skip_reconcile<T>(object: &impl MetadataAware, cache: &Cache) -> bool {
+        let name = object.metadata().name.unwrap();
+        let namespace = object.metadata().namespace.unwrap();
+        let namespaced_name = NamespacedName::new(name.as_str(), namespace.as_str());
+        let resource_version = object.metadata().resource_version.unwrap();
+        let generation = object.metadata().generation;
+        let map = cache.lock().await;
+        if let Some(value) = map.get(&namespaced_name) {
+            match (generation, value.generation) {
+                (Some(left), Some(right)) => {
+                    if left == right {
+                        info!("Object {} generation {}. Status updated, skip.", name, left);
+                        return true;
+                    }
+                }
+                (_, _) => {}
+            }
+            if resource_version == value.resource_version {
+                info!(
+                    "Object {} version {} already handled, skip",
+                    name, resource_version
+                );
+                return true;
+            }
+        }
+        false
+    }
+
     async fn handle_exposed_apps(sender: Sender<K8sObject<ExposedApp>>, cache: Cache) {
         let mut client = K8sClient::new().await;
         loop {
@@ -69,22 +98,13 @@ pub mod operator {
                             while let Some(event) = stream.next().await {
                                 info!("Received ExposedApp {:?} event", event.event_type);
                                 let name = event.object.metadata.name.clone().unwrap();
-                                let namespace = event.object.metadata.namespace.clone().unwrap();
-                                let namespaced_name =
-                                    NamespacedName::new(name.as_str(), namespace.as_str());
-                                let resource_version =
-                                    event.object.metadata.resource_version.clone().unwrap();
+                                if can_skip_reconcile::<K8sListObject<ExposedApp>>(
+                                    &event.object,
+                                    &cache,
+                                )
+                                .await
                                 {
-                                    let map = cache.lock().await;
-                                    if let Some(value) = map.get(&namespaced_name) {
-                                        if resource_version == *value {
-                                            info!(
-                                            "ExposedApp {} version {} already handled",
-                                            name, resource_version
-                                        );
-                                            continue;
-                                        }
-                                    }
+                                    continue;
                                 }
                                 info!("Sending reconcile event for {}", name);
                                 sender
@@ -127,47 +147,16 @@ pub mod operator {
                         Ok(stream) => {
                             pin_mut!(stream);
                             while let Some(event) = stream.next().await {
-                                let object_name = event.object.metadata.name.unwrap();
+                                let object_name = event.object.metadata.name.clone().unwrap();
                                 let version =
                                     event.object.metadata.resource_version.clone().unwrap();
                                 info!(
                                     "Received {:?} event for {}, version {}",
                                     event.event_type, object_name, version
                                 );
-                                let last_manager = event
-                                    .object
-                                    .metadata
-                                    .managed_fields
-                                    .and_then(|fields| fields.last().cloned())
-                                    .map(|fields| fields.manager);
-                                if let Some(manager) = last_manager {
-                                    if manager == KUBE_CONTROLLER_MANAGER {
-                                        info!(
-                                            "Last update by {}, that's fine. Skip",
-                                            KUBE_CONTROLLER_MANAGER
-                                        );
-                                        continue;
-                                    } else {
-                                        info!("Last update by {}, should reconcile", manager);
-                                    }
-                                }
-                                let namespace = event.object.metadata.namespace.unwrap();
-                                let namespaced_name =
-                                    NamespacedName::new(object_name.as_str(), namespace.as_str());
-                                {
-                                    let map = cache.lock().await;
-                                    if let Some(value) = map.get(&namespaced_name) {
-                                        if version == *value {
-                                            info!(
-                                            "Object {} version {} already handled",
-                                            object_name, version
-                                        );
-                                            continue;
-                                        }
-                                    } else {
-                                        info!("No {} in cache, skip", object_name);
-                                        continue;
-                                    }
+                                let namespace = event.object.metadata.namespace.clone().unwrap();
+                                if can_skip_reconcile::<K8sObject<T>>(&event.object, &cache).await {
+                                    continue;
                                 }
                                 info!("Looking for owner references for {}", object_name);
                                 if let Some(references) = event.object.metadata.owner_references {

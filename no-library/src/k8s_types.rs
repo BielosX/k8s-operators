@@ -61,7 +61,7 @@ pub struct Metadata {
     pub uid: Option<String>,
     pub namespace: Option<String>,
     pub owner_references: Option<Vec<OwnerReference>>,
-    pub managed_fields: Option<Vec<ManageFields>>,
+    pub generation: Option<u64>,
 }
 
 impl Default for Metadata {
@@ -76,7 +76,7 @@ impl Default for Metadata {
             namespace: None,
             owner_references: None,
             uid: None,
-            managed_fields: None,
+            generation: None,
         }
     }
 }
@@ -244,5 +244,21 @@ impl<T> Into<ObjectReference> for K8sObject<T> {
             namespace: self.metadata.namespace.unwrap(),
             uid: self.metadata.uid.unwrap(),
         }
+    }
+}
+
+pub trait MetadataAware {
+    fn metadata(&self) -> Metadata;
+}
+
+impl<T> MetadataAware for K8sObject<T> {
+    fn metadata(&self) -> Metadata {
+        self.metadata.clone()
+    }
+}
+
+impl<T> MetadataAware for K8sListObject<T> {
+    fn metadata(&self) -> Metadata {
+        self.metadata.clone()
     }
 }

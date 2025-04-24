@@ -17,7 +17,29 @@ impl NamespacedName {
     }
 }
 
-pub type Cache = Arc<Mutex<HashMap<NamespacedName, String>>>;
+#[derive(Clone)]
+pub struct CacheEntry {
+    pub resource_version: String,
+    pub generation: Option<u64>,
+}
+
+impl CacheEntry {
+    pub fn new(resource_version: &str, generation: u64) -> Self {
+        CacheEntry {
+            resource_version: String::from(resource_version),
+            generation: Some(generation),
+        }
+    }
+
+    pub fn new_no_generation(resource_version: &str) -> Self {
+        CacheEntry {
+            resource_version: String::from(resource_version),
+            generation: None,
+        }
+    }
+}
+
+pub type Cache = Arc<Mutex<HashMap<NamespacedName, CacheEntry>>>;
 
 pub fn new_cache() -> Cache {
     Arc::new(Mutex::new(HashMap::new()))
