@@ -1,0 +1,37 @@
+namePrefix: minimal-controller-
+namespace: minimal-controller-system
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - cluster_role.yaml
+  - cluster_role_binding.yaml
+  - service_account.yaml
+replacements:
+  - source:
+      kind: ClusterRole
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ClusterRoleBinding
+        fieldPaths:
+          - roleRef.name
+  - source:
+      kind: ServiceAccount
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ClusterRoleBinding
+        fieldPaths:
+          - subjects.0.name
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.serviceAccountName
+  - source:
+      kind: ServiceAccount
+      fieldPath: metadata.namespace
+    targets:
+      - select:
+          kind: ClusterRoleBinding
+        fieldPaths:
+          - subjects.0.namespace
