@@ -49,6 +49,10 @@ func NewK8sClient() (*K8sClient, error) {
 	return &K8sClient{clientSet: clientSet, cache: make(map[types.NamespacedName]CacheEntry)}, nil
 }
 
+type DeploymentUpdater interface {
+	UpdateDeployment(ctx context.Context, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
+}
+
 func (c *K8sClient) UpdateDeployment(
 	ctx context.Context,
 	deployment *appsv1.Deployment,
@@ -129,11 +133,11 @@ func (c *K8sClient) WatchDeployments(ctx context.Context, reconciler *Reconciler
 }
 
 type Reconciler struct {
-	client *K8sClient
+	updater DeploymentUpdater
 }
 
-func NewReconciler(client *K8sClient) *Reconciler {
-	return &Reconciler{client: client}
+func NewReconciler(updater DeploymentUpdater) *Reconciler {
+	return &Reconciler{updater: updater}
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, deployment *appsv1.Deployment) {
@@ -147,7 +151,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, deployment *appsv1.Deploymen
 	} else {
 		deployment.Labels["multipleReplicas"] = "false"
 	}
-	_, err := r.client.UpdateDeployment(ctx, deployment)
+	_, err := r.updater.UpdateDeployment(ctx, deployment)
 	if err != nil {
 		slog.Error(
 			fmt.Sprintf(
@@ -167,6 +171,10 @@ func main() {
 		slog.Error(fmt.Sprintf("Unable to create K8sClient, Reason: %s", err.Error()))
 		os.Exit(1)
 	}
+	/*
+		K8sClient UpdateDeployment is a pointer receiver (it's declared for *K8sClient)
+		So it needs to be passed as a pointer. Everything is safe (no mutex copy)
+	*/
 	reconciler := NewReconciler(client)
 	err = client.WatchDeployments(context.TODO(), reconciler)
 	if err != nil {
