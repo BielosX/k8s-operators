@@ -15,6 +15,16 @@ import (
 	"sync"
 )
 
+/*
+CacheEntry
+Don't cache the entire ObjectMeta!
+It contains ResourceVersion so changes all the time.
+Cache only meaningful fields like:
+  - Annotations
+  - Labels
+  - Finalizers
+  - OwnerReferences
+*/
 type CacheEntry struct {
 	ResourceVersion string // Changes on Metadata, Spec or Status update
 	Generation      int64  // Changes only on Spec update
