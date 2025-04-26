@@ -49,10 +49,15 @@ func NewK8sClient() (*K8sClient, error) {
 	return &K8sClient{clientSet: clientSet, cache: make(map[types.NamespacedName]CacheEntry)}, nil
 }
 
-func (c *K8sClient) UpdateDeployment(ctx context.Context, deployment *appsv1.Deployment) (*appsv1.Deployment, error) {
+func (c *K8sClient) UpdateDeployment(
+	ctx context.Context,
+	deployment *appsv1.Deployment,
+) (*appsv1.Deployment, error) {
 	defer c.mutex.Unlock()
 	c.mutex.Lock()
-	result, err := c.clientSet.AppsV1().Deployments(deployment.Namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	result, err := c.clientSet.AppsV1().
+		Deployments(deployment.Namespace).
+		Update(ctx, deployment, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +88,13 @@ func (c *K8sClient) WatchDeployments(ctx context.Context, reconciler *Reconciler
 				Name:      deployment.Name,
 			}]
 			if !ok {
-				slog.Info(fmt.Sprintf("No cache entry for %s %s, reconciling", deployment.Name, deployment.Namespace))
+				slog.Info(
+					fmt.Sprintf(
+						"No cache entry for %s %s, reconciling",
+						deployment.Name,
+						deployment.Namespace,
+					),
+				)
 				go reconciler.Reconcile(ctx, deployment)
 			} else {
 				if deployment.ResourceVersion != entry.ResourceVersion { // Labels, Spec or Status changed
@@ -134,7 +145,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, deployment *appsv1.Deploymen
 	}
 	_, err := r.client.UpdateDeployment(ctx, deployment)
 	if err != nil {
-		slog.Error(fmt.Sprintf("Failed to update Deployment %s %s. Error: %s", deployment.Name, deployment.Namespace, err.Error()))
+		slog.Error(
+			fmt.Sprintf(
+				"Failed to update Deployment %s %s. Error: %s",
+				deployment.Name,
+				deployment.Namespace,
+				err.Error(),
+			),
+		)
 	}
 }
 

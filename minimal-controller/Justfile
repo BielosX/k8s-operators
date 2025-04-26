@@ -32,3 +32,7 @@ kind-load: img-build
 
 k8s-apply: get-kustomize kind-load
     {{kustomize}} build config | IMG="localhost/minimal-controller:{{tag}}" envsubst | kubectl apply -f -
+
+fmt:
+    gofmt -w *.go
+    golines -w *.go
