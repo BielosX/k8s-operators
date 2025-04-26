@@ -72,6 +72,50 @@ func (c *K8sClient) UpdateDeployment(
 	return result, nil
 }
 
+func (c *K8sClient) handleEvent(ctx context.Context, event *watch.Event, reconciler *Reconciler) {
+	defer c.mutex.Unlock()
+	c.mutex.Lock()
+	slog.Info(fmt.Sprintf("Received an event of type %s", event.Type))
+	if event.Type == watch.Added || event.Type == watch.Modified {
+		deployment := event.Object.(*appsv1.Deployment)
+		entry, ok := c.cache[types.NamespacedName{
+			Namespace: deployment.Namespace,
+			Name:      deployment.Name,
+		}]
+		if !ok {
+			slog.Info(
+				fmt.Sprintf(
+					"No cache entry for %s %s, reconciling",
+					deployment.Name,
+					deployment.Namespace,
+				),
+			)
+			go reconciler.Reconcile(ctx, deployment)
+		} else {
+			if deployment.ResourceVersion != entry.ResourceVersion { // Labels, Spec or Status changed
+				slog.Info(fmt.Sprintf("Received version %s, cached version %s for %s %s",
+					deployment.ResourceVersion,
+					entry.ResourceVersion,
+					deployment.Name,
+					deployment.Namespace))
+				if reflect.DeepEqual(deployment.ObjectMeta.Labels, entry.Labels) { // Labels didn't change, only Status or Spec
+					if deployment.Generation != entry.Generation { // Spec changed
+						slog.Info(fmt.Sprintf("Spec updated for %s %s, Reconcile", deployment.Name, deployment.Namespace))
+						go reconciler.Reconcile(ctx, deployment)
+					} else { // Only Status changed
+						slog.Info(fmt.Sprintf("Status updated for %s %s, Skip", deployment.Name, deployment.Namespace))
+					}
+				} else { // Cached Labels not equal to one received
+					slog.Info(fmt.Sprintf("Labels updated for %s %s, Reconcile",
+						deployment.Name,
+						deployment.Namespace))
+					go reconciler.Reconcile(ctx, deployment)
+				}
+			}
+		}
+	}
+}
+
 func (c *K8sClient) WatchDeployments(ctx context.Context, reconciler *Reconciler) error {
 	result, err := c.clientSet.AppsV1().Deployments("").Watch(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -79,47 +123,7 @@ func (c *K8sClient) WatchDeployments(ctx context.Context, reconciler *Reconciler
 	}
 	defer result.Stop()
 	for event := range result.ResultChan() {
-		slog.Info(fmt.Sprintf("Received an event of type %s", event.Type))
-		if event.Type == watch.Added || event.Type == watch.Modified {
-			deployment := event.Object.(*appsv1.Deployment)
-			c.mutex.Lock()
-			entry, ok := c.cache[types.NamespacedName{
-				Namespace: deployment.Namespace,
-				Name:      deployment.Name,
-			}]
-			if !ok {
-				slog.Info(
-					fmt.Sprintf(
-						"No cache entry for %s %s, reconciling",
-						deployment.Name,
-						deployment.Namespace,
-					),
-				)
-				go reconciler.Reconcile(ctx, deployment)
-			} else {
-				if deployment.ResourceVersion != entry.ResourceVersion { // Labels, Spec or Status changed
-					slog.Info(fmt.Sprintf("Received version %s, cached version %s for %s %s",
-						deployment.ResourceVersion,
-						entry.ResourceVersion,
-						deployment.Name,
-						deployment.Namespace))
-					if reflect.DeepEqual(deployment.ObjectMeta.Labels, entry.Labels) { // Labels didn't change, only Status or Spec
-						if deployment.Generation != entry.Generation { // Spec changed
-							slog.Info(fmt.Sprintf("Spec updated for %s %s, Reconcile", deployment.Name, deployment.Namespace))
-							go reconciler.Reconcile(ctx, deployment)
-						} else { // Only Status changed
-							slog.Info(fmt.Sprintf("Status updated for %s %s, Skip", deployment.Name, deployment.Namespace))
-						}
-					} else { // Cached Labels not equal to one received
-						slog.Info(fmt.Sprintf("Labels updated for %s %s, Reconcile",
-							deployment.Name,
-							deployment.Namespace))
-						go reconciler.Reconcile(ctx, deployment)
-					}
-				}
-			}
-			c.mutex.Unlock()
-		}
+		c.handleEvent(ctx, &event, reconciler)
 	}
 	return nil
 }
