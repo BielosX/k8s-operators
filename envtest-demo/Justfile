@@ -1,0 +1,6 @@
+test:
+    #!/bin/bash -xe
+    mkdir -p bin
+    # https://pkg.go.dev/sigs.k8s.io/controller-runtime/tools/setup-envtest#section-readme
+    dir=$(setup-envtest use --bin-dir bin -p path)
+    ASSETS_DIR="${dir}" ginkgo -v
