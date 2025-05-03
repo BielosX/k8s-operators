@@ -11,6 +11,7 @@ pub mod client {
     use serde::de::DeserializeOwned;
     use serde::{Deserialize, Serialize};
     use serde_json::{from_str, to_string};
+    use std::env;
     use std::str::from_utf8;
     use std::time::Duration;
     use time::OffsetDateTime;
@@ -69,6 +70,8 @@ pub mod client {
     pub struct K8sClient {
         client: Client,
         token: String,
+        k8s_service_host: String,
+        k8s_service_port: u16,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -80,9 +83,32 @@ pub mod client {
 
     impl K8sClient {
         pub async fn new() -> Self {
+            let host = env::var("KUBERNETES_SERVICE_HOST").unwrap_or(String::new());
+            let port = env::var("KUBERNETES_SERVICE_PORT")
+                .map(|p| p.parse::<u16>().unwrap())
+                .unwrap_or(0);
+            if !host.is_empty() {
+                info!(
+                    "Using KUBERNETES_SERVICE_HOST: {} and KUBERNETES_SERVICE_PORT: {}",
+                    host, port
+                );
+            }
             K8sClient {
                 client: get_client().await,
                 token: get_token().await,
+                k8s_service_host: host,
+                k8s_service_port: port,
+            }
+        }
+
+        fn get_api_server_url(&self) -> String {
+            if self.k8s_service_host.is_empty() {
+                String::from(API_SERVER)
+            } else {
+                format!(
+                    "https://{}:{}",
+                    self.k8s_service_host, self.k8s_service_port
+                )
             }
         }
 
@@ -101,10 +127,11 @@ pub mod client {
             &mut self,
         ) -> Result<List<K8sObject<ExposedApp>>, K8sClientError> {
             let result = self
-                .send_with_retry(
-                    self.client
-                        .get(format!("{}/{}", API_SERVER, EXPOSED_APPS_LIST)),
-                )
+                .send_with_retry(self.client.get(format!(
+                    "{}/{}",
+                    self.get_api_server_url(),
+                    EXPOSED_APPS_LIST
+                )))
                 .await;
             let status = result.status();
             let text = result.text().await.unwrap();
@@ -124,7 +151,9 @@ pub mod client {
             let response = self
                 .send_with_retry(self.client.get(format!(
                     "{}/apis/stable.no-library.com/v1/namespaces/{}/exposedapps/{}",
-                    API_SERVER, namespace, name
+                    self.get_api_server_url(),
+                    namespace,
+                    name
                 )))
                 .await;
             let status = response.status();
@@ -156,7 +185,12 @@ pub mod client {
         ) -> Result<K8sObject<T>, K8sClientError> {
             let url = format!(
                 "{}/apis/{}/{}/namespaces/{}/{}/{}",
-                API_SERVER, group, version, namespace, resource_type, name
+                self.get_api_server_url(),
+                group,
+                version,
+                namespace,
+                resource_type,
+                name
             );
             self.put_with_url(item, url.as_str()).await
         }
@@ -179,7 +213,11 @@ pub mod client {
         ) -> Result<K8sObject<T>, K8sClientError> {
             let url = format!(
                 "{}/apis/{}/{}/namespaces/{}/{}",
-                API_SERVER, group, version, namespace, resource_type,
+                self.get_api_server_url(),
+                group,
+                version,
+                namespace,
+                resource_type,
             );
             self.execute(self.client.post(url), item).await
         }
@@ -277,7 +315,9 @@ pub mod client {
             let namespace = service.metadata.namespace.clone().unwrap();
             let url = format!(
                 "{}/api/v1/namespaces/{}/services/{}",
-                API_SERVER, namespace, name,
+                self.get_api_server_url(),
+                namespace,
+                name,
             );
             self.put_with_url(service, url.as_str()).await
         }
@@ -299,7 +339,9 @@ pub mod client {
             let mut response = self
                 .send_with_retry(self.client.get(format!(
                     "{}/{}?watch=1&resourceVersion={}",
-                    API_SERVER, uri, resource_version
+                    self.get_api_server_url(),
+                    uri,
+                    resource_version
                 )))
                 .await;
             let status = response.status();
@@ -338,7 +380,10 @@ pub mod client {
             uri: &str,
         ) -> Result<List<K8sListObject<T>>, K8sClientError> {
             let response = self
-                .send_with_retry(self.client.get(format!("{}/{}", API_SERVER, uri)))
+                .send_with_retry(
+                    self.client
+                        .get(format!("{}/{}", self.get_api_server_url(), uri)),
+                )
                 .await;
             let status = response.status();
             let text = response.text().await.unwrap();
@@ -357,7 +402,9 @@ pub mod client {
         ) -> Result<K8sObject<Lease>, K8sClientError> {
             let url = format!(
                 "{}/apis/coordination.k8s.io/v1/namespaces/{}/leases/{}",
-                API_SERVER, namespace, name
+                self.get_api_server_url(),
+                namespace,
+                name
             );
             let result = self.send_with_retry(self.client.get(url)).await;
             let status = result.status();
@@ -378,7 +425,9 @@ pub mod client {
         ) -> Result<K8sObject<ExposedApp>, K8sClientError> {
             let url = format!(
                 "{}/apis/stable.no-library.com/v1/namespaces/{}/exposedapps/{}/status",
-                API_SERVER, namespace, name
+                self.get_api_server_url(),
+                namespace,
+                name
             );
             self.execute(self.client.put(url), app).await
         }
@@ -390,7 +439,8 @@ pub mod client {
         ) -> Result<K8sObject<Event>, K8sClientError> {
             let url = format!(
                 "{}/apis/events.k8s.io/v1/namespaces/{}/events",
-                API_SERVER, namespace
+                self.get_api_server_url(),
+                namespace
             );
             self.execute(self.client.post(url), event).await
         }
@@ -423,7 +473,9 @@ pub mod client {
             let serialized = to_string(&entries).unwrap();
             let url = format!(
                 "{}/apis/coordination.k8s.io/v1/namespaces/{}/leases/{}",
-                API_SERVER, namespace, name
+                self.get_api_server_url(),
+                namespace,
+                name
             );
             let response = self
                 .send_with_retry(
