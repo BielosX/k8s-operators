@@ -20,6 +20,7 @@ install-prometheus-operator:
 install-ingress-nginx:
     kubectl apply -f 'https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-{{ ingress-nginx-version }}/deploy/static/provider/cloud/deploy.yaml'
     kubectl rollout status -w -n ingress-nginx deployment/ingress-nginx-controller --timeout=120s
+    kubectl apply -f nginx_internal.yaml
 
 setup-cluster: create-cluster install-cert-manager install-prometheus-operator install-ingress-nginx
 
