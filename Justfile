@@ -1,6 +1,7 @@
 cert-manager-version := "v1.17.1"
 prometheus-operator-version := "v0.82.0"
 grafana-operator-version := "v5.17.1"
+ingress-nginx-version := "v1.12.2"
 
 
 create-cluster:
@@ -16,7 +17,11 @@ install-prometheus-operator:
     kubectl apply -f prometheus.yaml
     kubectl apply -f prometheus_service.yaml
 
-setup-cluster: create-cluster install-cert-manager install-prometheus-operator
+install-ingress-nginx:
+    kubectl apply -f 'https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-{{ ingress-nginx-version }}/deploy/static/provider/cloud/deploy.yaml'
+    kubectl rollout status -w -n ingress-nginx deployment/ingress-nginx-controller --timeout=120s
+
+setup-cluster: create-cluster install-cert-manager install-prometheus-operator install-ingress-nginx
 
 delete-cluster:
     kind delete cluster
