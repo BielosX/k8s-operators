@@ -4,7 +4,7 @@ metadata:
   name: ingress
   namespace: system
   annotations:
-    cert-manager.io/issuer: webhook-ca-issuer
+    cert-manager.io/issuer: placeholder
 spec:
   ingressClassName: nginx
   tls:
