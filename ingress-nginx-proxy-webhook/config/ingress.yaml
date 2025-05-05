@@ -10,7 +10,7 @@ spec:
   tls:
     - hosts:
         - ingress-nginx-controller-internal.ingress-nginx.svc
-      secretName: webhook-ingress-tls
+      secretName: SECRET_NAME
   rules:
     - host: ingress-nginx-controller-internal.ingress-nginx.svc
       http:

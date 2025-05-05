@@ -12,11 +12,35 @@ resources:
 replacements:
   - source:
       kind: Service
-      name: webhook-service
       fieldPath: metadata.name
     targets:
       - select:
           kind: Ingress
-          name: webhook-ingress
         fieldPaths:
           - spec.rules.0.http.paths.0.backend.service.name
+  - source:
+      kind: Secret
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Ingress
+        fieldPaths:
+          - spec.tls.0.secretName
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: "/"
+          index: 1
+  - source:
+      kind: Secret
+      fieldPath: metadata.namespace
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: "/"
+          index: 0

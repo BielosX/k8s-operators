@@ -4,7 +4,7 @@ metadata:
   name: validating-webhook
   namespace: system
   annotations:
-    cert-manager.io/inject-ca-from: webhook-system/webhook-ingress-tls
+    cert-manager.io/inject-ca-from: NAMESPACE/NAME
 webhooks:
   - admissionReviewVersions: ["v1"]
     rules:
