@@ -1,0 +1,18 @@
+timestamp := `date +%s`
+tag := env('TAG', timestamp)
+
+run:
+    uv run fastapi dev
+
+
+img-build:
+    rm -rf target
+    podman build --tag 'webhook:{{tag}}' .
+    mkdir -p target
+    podman save -o target/webhook.tar 'webhook:{{tag}}'
+
+kind-load: img-build
+    kind load image-archive target/webhook.tar
+
+k8s-apply: kind-load
+    kustomize build config | IMAGE="localhost/webhook:{{tag}}" envsubst | kubectl apply -f -

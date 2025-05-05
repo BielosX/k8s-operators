@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress
+  namespace: system
+  annotations:
+    cert-manager.io/issuer: webhook-ca-issuer
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ingress-nginx-controller-internal.ingress-nginx.svc
+      secretName: webhook-ingress-tls
+  rules:
+    - host: ingress-nginx-controller-internal.ingress-nginx.svc
+      http:
+        paths:
+          - backend:
+              service:
+                name: SERVICE_NAME
+                port:
+                  number: 8080
+            pathType: Prefix
+            path: /

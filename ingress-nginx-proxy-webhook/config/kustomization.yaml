@@ -1,0 +1,22 @@
+namespace: webhook-system
+namePrefix: webhook-
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - secret.yaml
+  - issuer.yaml
+  - validating_webhook.yaml
+
+replacements:
+  - source:
+      kind: Service
+      name: webhook-service
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Ingress
+          name: webhook-ingress
+        fieldPaths:
+          - spec.rules.0.http.paths.0.backend.service.name
