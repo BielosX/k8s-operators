@@ -9,10 +9,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - ingress-nginx-controller-internal.ingress-nginx.svc
+        - placeholder.local
       secretName: SECRET_NAME
   rules:
-    - host: ingress-nginx-controller-internal.ingress-nginx.svc
+    - host: placeholder.local
       http:
         paths:
           - backend:

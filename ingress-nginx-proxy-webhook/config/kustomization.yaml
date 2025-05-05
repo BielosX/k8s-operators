@@ -9,6 +9,24 @@ resources:
   - issuer.yaml
   - validating_webhook.yaml
 
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: ingress-nginx-controller-internal.ingress-nginx.svc
+    target:
+      kind: Ingress
+      name: ingress
+      namespace: system
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: ingress-nginx-controller-internal.ingress-nginx.svc
+    target:
+      kind: Ingress
+      name: ingress
+      namespace: system
+
 replacements:
   - source:
       kind: Service
@@ -44,3 +62,11 @@ replacements:
         options:
           delimiter: "/"
           index: 0
+  - source:
+      kind: Issuer
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Ingress
+        fieldPaths:
+          - metadata.annotations.[cert-manager.io/issuer]
