@@ -96,7 +96,7 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 	} else {
-		*deployment.Spec.Replicas = exposedApp.Spec.Replicas
+		deployment.Spec.Replicas = &exposedApp.Spec.Replicas
 		deployment.Spec.Template.Spec.Containers[0].Image = exposedApp.Spec.Image
 		deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort = exposedApp.Spec.ContainerPort
 		deployment.Spec.Template.Spec.Containers[0].Ports[0].Protocol = corev1.Protocol(exposedApp.Spec.Protocol)

@@ -18,21 +18,18 @@ package controller
 
 import (
 	"context"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
-	"time"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	stablev1 "k3builder.com/exposedapp/api/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -148,7 +145,44 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(service.Spec.Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
 			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
 		})
-		It("should remove deployment and service on ExposedApp removal", func() {
+		It("should successfully update deployment with proper parameters", func() {
+			By("Reconciling the created resource")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			resource := &stablev1.ExposedApp{}
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Spec.Replicas).To(Equal(int32(2)))
+
+			By("Fetching the deployment and updating the replicas")
+			deployment := &appsv1.Deployment{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.DeploymentName,
+			}, deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*deployment.Spec.Replicas).To(Equal(resource.Spec.Replicas))
+
+			resource.Spec.Replicas = 3
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			By("Reconciling the updated resource")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+
+			By("Fetching the deployment and updating the replicas")
+			deployment = &appsv1.Deployment{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.DeploymentName,
+			}, deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*deployment.Spec.Replicas).To(Equal(int32(3)))
+		})
+		It("Should set ownerReference on the created resources", func() {
+			By("Reconciling the created resource")
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
@@ -157,38 +191,29 @@ var _ = Describe("ExposedApp Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			service := &corev1.Service{}
-			serviceNamespacedName := types.NamespacedName{
-				Namespace: typeNamespacedName.Namespace,
-				Name:      resource.Status.ServiceName,
-			}
-			err = k8sClient.Get(ctx, serviceNamespacedName, service)
-			Expect(err).NotTo(HaveOccurred())
 			deployment := &appsv1.Deployment{}
-			deploymentNamespaceName := types.NamespacedName{
+			err = k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: typeNamespacedName.Namespace,
 				Name:      resource.Status.DeploymentName,
-			}
-			err = k8sClient.Get(ctx, deploymentNamespaceName, deployment)
+			}, deployment)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(deployment.OwnerReferences[0].Name).To(Equal(resource.Name))
+			Expect(deployment.OwnerReferences[0].Kind).To(Equal("ExposedApp"))
+			Expect(deployment.OwnerReferences[0].UID).To(Equal(resource.UID))
+			Expect(*deployment.OwnerReferences[0].Controller).To(Equal(true))
+			Expect(*deployment.OwnerReferences[0].BlockOwnerDeletion).To(Equal(true))
 
-			err = k8sClient.Delete(ctx, resource, &client.DeleteOptions{
-				PropagationPolicy: ptr.To(metav1.DeletePropagationForeground),
-			})
+			service := &corev1.Service{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: typeNamespacedName.Namespace,
+				Name:      resource.Status.ServiceName,
+			}, service)
 			Expect(err).NotTo(HaveOccurred())
-
-			Eventually(func(g Gomega) {
-				service := &corev1.Service{}
-				err := k8sClient.Get(ctx, serviceNamespacedName, service)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithTimeout(20 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
-			Eventually(func(g Gomega) {
-				deployment := &appsv1.Deployment{}
-				err := k8sClient.Get(ctx, deploymentNamespaceName, deployment)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithTimeout(20 * time.Second).WithPolling(2 * time.Second).Should(Succeed())
+			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
+			Expect(service.OwnerReferences[0].Kind).To(Equal("ExposedApp"))
+			Expect(service.OwnerReferences[0].UID).To(Equal(resource.UID))
+			Expect(*service.OwnerReferences[0].Controller).To(Equal(true))
+			Expect(*service.OwnerReferences[0].BlockOwnerDeletion).To(Equal(true))
 		})
 	})
 })
