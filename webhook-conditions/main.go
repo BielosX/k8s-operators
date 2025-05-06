@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/handlers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -16,29 +17,12 @@ import (
 	"strconv"
 )
 
-type statusAwareResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (writer *statusAwareResponseWriter) WriteHeader(statusCode int) {
-	writer.statusCode = statusCode
-	writer.ResponseWriter.WriteHeader(statusCode)
-}
-
 func handleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	http.HandleFunc(pattern, func(writer http.ResponseWriter, request *http.Request) {
-		statusAwareWriter := statusAwareResponseWriter{writer, http.StatusOK}
-		handler(&statusAwareWriter, request)
-		slog.Info(fmt.Sprintf("Request %s %s responded %d",
-			request.Method, request.URL, statusAwareWriter.statusCode))
-	})
+	http.Handle(pattern, handlers.LoggingHandler(os.Stdout, http.HandlerFunc(handler)))
 }
 
 func handle(pattern string, handler http.Handler) {
-	handleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r)
-	})
+	http.Handle(pattern, handlers.LoggingHandler(os.Stdout, handler))
 }
 
 func validate(request *admissionv1.AdmissionRequest) (*admissionv1.AdmissionResponse, error) {
