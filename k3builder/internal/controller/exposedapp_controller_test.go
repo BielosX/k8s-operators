@@ -197,6 +197,7 @@ var _ = Describe("ExposedApp Controller", func() {
 				Name:      resource.Status.DeploymentName,
 			}, deployment)
 			Expect(err).NotTo(HaveOccurred())
+			By("Checking the ownerReference on the deployment")
 			Expect(deployment.OwnerReferences[0].Name).To(Equal(resource.Name))
 			Expect(deployment.OwnerReferences[0].Kind).To(Equal("ExposedApp"))
 			Expect(deployment.OwnerReferences[0].UID).To(Equal(resource.UID))
@@ -209,6 +210,7 @@ var _ = Describe("ExposedApp Controller", func() {
 				Name:      resource.Status.ServiceName,
 			}, service)
 			Expect(err).NotTo(HaveOccurred())
+			By("Checking the ownerReference on the service")
 			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
 			Expect(service.OwnerReferences[0].Kind).To(Equal("ExposedApp"))
 			Expect(service.OwnerReferences[0].UID).To(Equal(resource.UID))
