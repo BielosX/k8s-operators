@@ -273,6 +273,7 @@ func (r *ExposedAppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&stablev1.ExposedApp{}).
 		Named("exposedapp").
+		// Watch with ownerReferences predicate, skip if ExposedApp not in OwnerReferences list
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Complete(r)
