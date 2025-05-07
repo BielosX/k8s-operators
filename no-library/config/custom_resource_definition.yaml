@@ -36,8 +36,10 @@ spec:
                 image:
                   type: string
                   x-kubernetes-validations:
-                    - rule: "self.split(':')[1] != 'latest'"
-                      message: "'latest' tag not allowed"
+                    - rule: "self.split(':').size() == 2"
+                      message: "Image must include a tag (e.g. 'nginx:1.25')"
+                    - rule: "self.split(':').size() == 2 ? self.split(':')[1] != 'latest' : true"
+                      message: "'latest' tag is not allowed"
                 protocol:
                   type: string
                   enum: ["TCP", "UDP", "SCTP"]
