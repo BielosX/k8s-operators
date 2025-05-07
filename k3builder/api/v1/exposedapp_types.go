@@ -23,18 +23,26 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// ServiceProtocol defines the Protocol field of a Service
+// +kubebuilder:validation:Enum=TCP;UDP
+type ServiceProtocol string
+
+// Port defines TCP/UDP port
+// +kubebuilder:validation:Minimum=0
+// +kubebuilder:validation:Maximum=65535
+type Port int16
+
 // ExposedAppSpec defines the desired state of ExposedApp.
 type ExposedAppSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Replicas int32  `json:"replicas"`
-	Image    string `json:"image"`
-	// +kubebuilder:validation:Enum=TCP;UDP
-	Protocol      string `json:"protocol"`
-	Port          int32  `json:"port"`
-	ContainerPort int32  `json:"containerPort"`
-	NodePort      *int32 `json:"nodePort,omitempty"`
+	Replicas      int32           `json:"replicas"`
+	Image         string          `json:"image"`
+	Protocol      ServiceProtocol `json:"protocol"`
+	Port          Port            `json:"port"`
+	ContainerPort Port            `json:"containerPort"`
+	NodePort      *Port           `json:"nodePort,omitempty"`
 	// +kubebuilder:validation:Enum=ClusterIP;NodePort
 	ServiceType string `json:"serviceType,omitempty"`
 }

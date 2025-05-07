@@ -53,17 +53,24 @@ spec:
             description: ExposedAppSpec defines the desired state of ExposedApp.
             properties:
               containerPort:
-                format: int32
+                description: Port defines TCP/UDP port
+                maximum: 65535
+                minimum: 0
                 type: integer
               image:
                 type: string
               nodePort:
-                format: int32
+                description: Port defines TCP/UDP port
+                maximum: 65535
+                minimum: 0
                 type: integer
               port:
-                format: int32
+                description: Port defines TCP/UDP port
+                maximum: 65535
+                minimum: 0
                 type: integer
               protocol:
+                description: ServiceProtocol defines the Protocol field of a Service
                 enum:
                 - TCP
                 - UDP
