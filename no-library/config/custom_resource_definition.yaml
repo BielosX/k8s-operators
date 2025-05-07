@@ -35,16 +35,27 @@ spec:
                   type: integer
                 image:
                   type: string
+                  x-kubernetes-validations:
+                    - rule: "self.split(':')[1] != 'latest'"
+                      message: "'latest' tag not allowed"
                 protocol:
                   type: string
+                  enum: ["TCP", "UDP", "SCTP"]
                 port:
                   type: integer
+                  minimum: 0
+                  maximum: 65535
                 containerPort:
                   type: integer
+                  minimum: 0
+                  maximum: 65535
                 nodePort:
                   type: integer
+                  minimum: 0
+                  maximum: 65535
                 serviceType:
                   type: string
+                  enum: ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
             status:
               type: object
               properties:
