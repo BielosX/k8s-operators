@@ -139,17 +139,22 @@ func main() {
 		slog.Info(fmt.Sprintf("Listening on port %d", port))
 	} else {
 		slog.Error(fmt.Sprintf("Unable to listen on port %d", port), "error", err)
+		os.Exit(1)
 	}
 	if len(certFile) == 0 || len(keyFile) == 0 {
 		err = http.Serve(listener, nil)
 		if err != nil {
 			slog.Error("Unable to serve HTTP traffic", "error", err)
+			os.Exit(1)
 		}
+		slog.Info("HTTP server started")
 	} else {
 		slog.Info(fmt.Sprintf("Using CertFile %s, KeyFile %s", certFile, keyFile))
 		err = http.ServeTLS(listener, nil, certFile, keyFile)
 		if err != nil {
 			slog.Error("Unable to serve HTTPS traffic", "error", err)
+			os.Exit(1)
 		}
+		slog.Info("HTTPS server started")
 	}
 }

@@ -21,6 +21,9 @@ build:
 fmt:
     golangci-lint fmt
 
+e2e: build
+   ginkgo --v e2e
+
 img-build:
     rm -rf target
     podman build --tag 'webhook-conditions:{{tag}}' .
