@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -19,7 +20,11 @@ func TestE2e(t *testing.T) {
 var cmd = exec.Command("../target/main")
 
 var _ = BeforeSuite(func() {
-	err := cmd.Start()
+	file, err := os.Create("../target/out.txt")
+	Expect(err).ToNot(HaveOccurred())
+	cmd.Stdout = file
+	cmd.Stderr = file
+	err = cmd.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
