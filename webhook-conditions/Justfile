@@ -21,7 +21,10 @@ build:
 fmt:
     golangci-lint fmt
 
-e2e: build
+clean:
+    rm -rf target
+
+e2e: clean build
    ginkgo --v e2e
 
 img-build:

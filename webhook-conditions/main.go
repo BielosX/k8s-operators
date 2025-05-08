@@ -56,13 +56,13 @@ func validateHandler(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&review)
 	if err != nil {
 		slog.Error("Unable to parse AdmissionReview", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		serverErrors.Inc()
 		return
 	}
 	if review.Request == nil {
 		slog.Error("Request field not found in AdmissionReview")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		serverErrors.Inc()
 		return
 	}
