@@ -15,26 +15,10 @@ import (
 	"sync"
 )
 
-/*
-CacheEntry
-Don't cache the entire ObjectMeta!
-It contains ResourceVersion so changes all the time.
-Cache only meaningful fields like:
-  - Annotations
-  - Labels
-  - Finalizers
-  - OwnerReferences
-*/
-type CacheEntry struct {
-	ResourceVersion string // Changes on Metadata, Spec or Status update
-	Generation      int64  // Changes only on Spec update
-	Labels          map[string]string
-}
-
 type K8sClient struct {
 	clientSet *kubernetes.Clientset
 	mutex     sync.Mutex
-	cache     map[types.NamespacedName]CacheEntry
+	cache     map[types.NamespacedName]metav1.ObjectMeta
 }
 
 func NewK8sClient() (*K8sClient, error) {
@@ -46,7 +30,7 @@ func NewK8sClient() (*K8sClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &K8sClient{clientSet: clientSet, cache: make(map[types.NamespacedName]CacheEntry)}, nil
+	return &K8sClient{clientSet: clientSet, cache: make(map[types.NamespacedName]metav1.ObjectMeta)}, nil
 }
 
 type DeploymentUpdater interface {
@@ -68,11 +52,7 @@ func (c *K8sClient) UpdateDeployment(
 	c.cache[types.NamespacedName{
 		Namespace: deployment.Namespace,
 		Name:      deployment.Name,
-	}] = CacheEntry{
-		ResourceVersion: result.ResourceVersion,
-		Generation:      result.Generation,
-		Labels:          result.ObjectMeta.Labels,
-	}
+	}] = result.ObjectMeta
 	return result, nil
 }
 
