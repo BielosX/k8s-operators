@@ -16,6 +16,13 @@ func ToString(reader io.Reader) (string, error) {
 	return buf.String(), nil
 }
 
+func ParseBody(reader io.Reader) map[string]any {
+	str, _ := ToString(reader)
+	var review map[string]any
+	_ = json.Unmarshal([]byte(str), &review)
+	return review
+}
+
 func RequestWithUid(uid string) string {
 	payload := `
 		{

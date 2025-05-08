@@ -1,7 +1,6 @@
 package e2e_test
 
 import (
-	"encoding/json"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"net/http"
@@ -47,11 +46,7 @@ var _ = Describe("E2e", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-		review := make(map[string]any)
-		str, err := e2e.ToString(resp.Body)
-		Expect(err).ToNot(HaveOccurred())
-		err = json.Unmarshal([]byte(str), &review)
-		Expect(err).ToNot(HaveOccurred())
+		review := e2e.ParseBody(resp.Body)
 		response := review["response"].(map[string]any)
 		Expect(response["allowed"]).To(BeTrue())
 		Expect(response["uid"]).To(Equal(uid))
@@ -66,11 +61,7 @@ var _ = Describe("E2e", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-		review := make(map[string]any)
-		str, err := e2e.ToString(resp.Body)
-		Expect(err).ToNot(HaveOccurred())
-		err = json.Unmarshal([]byte(str), &review)
-		Expect(err).ToNot(HaveOccurred())
+		review := e2e.ParseBody(resp.Body)
 		response := review["response"].(map[string]any)
 		status := response["status"].(map[string]any)
 		message := status["message"].(string)
