@@ -98,7 +98,7 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	} else {
 		deployment.Spec.Replicas = &exposedApp.Spec.Replicas
 		deployment.Spec.Template.Spec.Containers[0].Image = exposedApp.Spec.Image
-		deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort = exposedApp.Spec.ContainerPort
+		deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort = int32(exposedApp.Spec.ContainerPort)
 		deployment.Spec.Template.Spec.Containers[0].Ports[0].Protocol = corev1.Protocol(exposedApp.Spec.Protocol)
 		err = r.Update(ctx, deployment)
 		if err != nil {
@@ -141,10 +141,10 @@ func (r *ExposedAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 	} else {
-		service.Spec.Ports[0].Port = exposedApp.Spec.Port
+		service.Spec.Ports[0].Port = int32(exposedApp.Spec.Port)
 		service.Spec.Ports[0].Protocol = corev1.Protocol(exposedApp.Spec.Protocol)
 		if exposedApp.Spec.NodePort != nil {
-			service.Spec.Ports[0].NodePort = *exposedApp.Spec.NodePort
+			service.Spec.Ports[0].NodePort = int32(*exposedApp.Spec.NodePort)
 		}
 		if len(exposedApp.Spec.ServiceType) != 0 {
 			service.Spec.Type = corev1.ServiceType(exposedApp.Spec.ServiceType)
@@ -205,10 +205,10 @@ func (r *ExposedAppReconciler) InitStatus(ctx context.Context, exposedApp *stabl
 func (r *ExposedAppReconciler) Service(exposedApp *stablev1.ExposedApp, podLabels map[string]string, serviceName string) (*corev1.Service, error) {
 	servicePort := corev1.ServicePort{
 		Protocol: corev1.Protocol(exposedApp.Spec.Protocol),
-		Port:     exposedApp.Spec.Port,
+		Port:     int32(exposedApp.Spec.Port),
 	}
 	if exposedApp.Spec.NodePort != nil {
-		servicePort.NodePort = *exposedApp.Spec.NodePort
+		servicePort.NodePort = int32(*exposedApp.Spec.NodePort)
 	}
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -252,7 +252,7 @@ func (r *ExposedAppReconciler) Deployment(exposedApp *stablev1.ExposedApp, deplo
 						Image: exposedApp.Spec.Image,
 						Name:  mainContainerName,
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: exposedApp.Spec.ContainerPort,
+							ContainerPort: int32(exposedApp.Spec.ContainerPort),
 							Protocol:      corev1.Protocol(exposedApp.Spec.Protocol),
 						}},
 					}},

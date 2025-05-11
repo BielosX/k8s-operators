@@ -52,7 +52,7 @@ var _ = Describe("ExposedApp Controller", func() {
 			By("creating the custom resource for the Kind ExposedApp")
 			err := k8sClient.Get(ctx, typeNamespacedName, exposedapp)
 			if err != nil && errors.IsNotFound(err) {
-				var nodePort int32 = 30000
+				var nodePort stablev1.Port = 30000
 				resource := &stablev1.ExposedApp{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
@@ -119,7 +119,7 @@ var _ = Describe("ExposedApp Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*deployment.Spec.Replicas).To(Equal(resource.Spec.Replicas))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(resource.Spec.Image))
-			Expect(deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(resource.Spec.ContainerPort))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(int32(resource.Spec.ContainerPort)))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
 			Expect(deployment.OwnerReferences[0].Name).To(Equal(resource.Name))
 		})
@@ -140,8 +140,8 @@ var _ = Describe("ExposedApp Controller", func() {
 			}, service)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(service.Spec.Type).To(Equal(corev1.ServiceType(resource.Spec.ServiceType)))
-			Expect(service.Spec.Ports[0].Port).To(Equal(resource.Spec.Port))
-			Expect(service.Spec.Ports[0].NodePort).To(Equal(*resource.Spec.NodePort))
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(resource.Spec.Port)))
+			Expect(service.Spec.Ports[0].NodePort).To(Equal(int32(*resource.Spec.NodePort)))
 			Expect(service.Spec.Ports[0].Protocol).To(Equal(corev1.Protocol(resource.Spec.Protocol)))
 			Expect(service.OwnerReferences[0].Name).To(Equal(resource.Name))
 		})

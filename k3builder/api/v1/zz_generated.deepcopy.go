@@ -89,7 +89,7 @@ func (in *ExposedAppSpec) DeepCopyInto(out *ExposedAppSpec) {
 	*out = *in
 	if in.NodePort != nil {
 		in, out := &in.NodePort, &out.NodePort
-		*out = new(int32)
+		*out = new(Port)
 		**out = **in
 	}
 }
