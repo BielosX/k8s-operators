@@ -1,0 +1,24 @@
+timestamp := `date +%s`
+tag := env('TAG', timestamp)
+
+crd:
+    mkdir -p config/crd
+    cargo run --bin crdgen > config/crd/exposed_app.yaml
+
+fmt:
+    cargo fmt
+
+img-build: crd
+    rm -rf target
+    podman build --tag 'kube-rs-o6r:{{tag}}' .
+    mkdir -p target
+    podman save -o target/kube-rs-o6r.tar 'kube-rs-o6r:{{tag}}'
+
+kind-load: img-build
+    kind load image-archive target/kube-rs-o6r.tar
+
+k8s-apply: kind-load
+    kustomize build config | IMAGE="localhost/kube-rs-o6r:{{tag}}" envsubst | kubectl apply -f -
+
+example-apply:
+    kustomize build config/example | kubectl apply -f -

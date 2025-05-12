@@ -1,0 +1,17 @@
+namePrefix: kube-rs-o6r-
+namespace: kube-rs-o6r-system
+
+resources:
+  - crd
+  - rbac
+  - manager
+
+replacements:
+  - source:
+      kind: ServiceAccount
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.serviceAccountName

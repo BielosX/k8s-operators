@@ -1,0 +1,44 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cr
+rules:
+  - verbs:
+      - "get"
+      - "watch"
+      - "list"
+      - "update"
+      - "patch"
+    apiGroups:
+      - "stable.kube-rs-o6r.com"
+    resources:
+      - "exposedapps"
+      - "exposedapps/status"
+  - verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+    apiGroups:
+      - "apps"
+    resources:
+      - "deployments"
+  - verbs:
+      - "create"
+      - "update"
+      - "delete"
+      - "get"
+      - "list"
+      - "watch"
+    apiGroups: [""]
+    resources:
+      - "services"
+  - verbs:
+      - "create"
+      - "update"
+    apiGroups:
+      - "events.k8s.io"
+    resources:
+      - "events"

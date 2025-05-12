@@ -1,0 +1,13 @@
+apiVersion: stable.kube-rs-o6r.com/v1
+kind: ExposedApp
+metadata:
+  name: demo-exposed-app
+  namespace: example
+spec:
+  replicas: 2
+  image: "nginx:alpine"
+  protocol: TCP
+  port: 3000
+  containerPort: 80
+  nodePort: 30950
+  serviceType: "NodePort"
