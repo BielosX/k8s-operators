@@ -32,7 +32,6 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
     let serve = axum::serve(listener, app);
-
     let controller = Controller::new(exposed_apps, Config::default())
         .owns(deployments, Config::default())
         .owns(services, Config::default())
@@ -40,7 +39,7 @@ async fn main() -> Result<()> {
         .for_each(|res| async move {
             match res {
                 Ok(o) => info!("reconciled {:?}", o),
-                Err(e) => warn!("reconcile failed: {}", e.to_string()),
+                Err(e) => warn!("reconcile failed: {:?}", e),
             }
         });
     select! {

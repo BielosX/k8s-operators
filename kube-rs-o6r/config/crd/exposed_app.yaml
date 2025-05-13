@@ -12,7 +12,15 @@ spec:
     singular: exposedapp
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - description: Deployment Name
+      jsonPath: .status.deploymentName
+      name: DeploymentName
+      type: string
+    - description: Service Name
+      jsonPath: .status.serviceName
+      name: ServiceName
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
@@ -21,33 +29,31 @@ spec:
           spec:
             properties:
               containerPort:
-                format: uint16
+                format: int32
                 maximum: 65535.0
                 minimum: 1.0
-                nullable: true
                 type: integer
               image:
                 type: string
               nodePort:
-                format: uint16
-                minimum: 0.0
+                format: int32
                 nullable: true
                 type: integer
               port:
-                format: uint16
+                format: int32
                 maximum: 65535.0
                 minimum: 1.0
                 type: integer
               protocol:
                 type: string
               replicas:
-                format: uint32
-                minimum: 0.0
+                format: int32
                 type: integer
               serviceType:
                 nullable: true
                 type: string
             required:
+            - containerPort
             - image
             - port
             - protocol
@@ -57,12 +63,11 @@ spec:
             nullable: true
             properties:
               deploymentName:
+                nullable: true
                 type: string
               serviceName:
+                nullable: true
                 type: string
-            required:
-            - deploymentName
-            - serviceName
             type: object
         required:
         - spec

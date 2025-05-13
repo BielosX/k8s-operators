@@ -16,7 +16,7 @@ rules:
       - "exposedapps/status"
   - verbs:
       - "create"
-      - "update"
+      - "patch"
       - "delete"
       - "get"
       - "list"
@@ -27,7 +27,7 @@ rules:
       - "deployments"
   - verbs:
       - "create"
-      - "update"
+      - "patch"
       - "delete"
       - "get"
       - "list"
