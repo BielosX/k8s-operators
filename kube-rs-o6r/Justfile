@@ -9,7 +9,7 @@ fmt:
     cargo fmt
 
 img-build: crd
-    rm -rf target
+    rm -r -f target
     podman build --tag 'kube-rs-o6r:{{tag}}' .
     mkdir -p target
     podman save -o target/kube-rs-o6r.tar 'kube-rs-o6r:{{tag}}'

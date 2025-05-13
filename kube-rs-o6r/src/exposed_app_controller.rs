@@ -9,8 +9,11 @@ use kube::api::Patch::Merge;
 use kube::api::{PatchParams, PostParams};
 use kube::runtime::controller::Action;
 use kube::{Api, Client, Error, Resource};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -23,6 +26,20 @@ pub struct Data {
 impl Data {
     pub fn new(client: Client) -> Self {
         Self { client }
+    }
+}
+
+async fn save<T: Clone + DeserializeOwned + Debug + Serialize>(
+    api: &Api<T>,
+    name: &str,
+    object: &T,
+) -> Result<T, Error> {
+    match api.get_opt(name).await? {
+        None => api.create(&PostParams::default(), &object).await,
+        Some(_) => {
+            api.patch(name, &PatchParams::default(), &Merge(&object))
+                .await
+        }
     }
 }
 
@@ -43,44 +60,14 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
         &pod_labels,
         &object,
     );
-    match deployments.get_opt(deployment_name.as_str()).await? {
-        None => {
-            deployments
-                .create(&PostParams::default(), &new_deployment)
-                .await?;
-        }
-        Some(_) => {
-            deployments
-                .patch(
-                    deployment_name.as_str(),
-                    &PatchParams::default(),
-                    &Merge(&new_deployment),
-                )
-                .await?;
-        }
-    }
+    save(&deployments, deployment_name.as_str(), &new_deployment).await?;
     let new_service = service(
         service_name.as_str(),
         namespace.as_str(),
         &pod_labels,
         &object,
     );
-    match services.get_opt(service_name.as_str()).await? {
-        None => {
-            services
-                .create(&PostParams::default(), &new_service)
-                .await?;
-        }
-        Some(_) => {
-            services
-                .patch(
-                    service_name.as_str(),
-                    &PatchParams::default(),
-                    &Merge(&new_service),
-                )
-                .await?;
-        }
-    }
+    save(&services, service_name.as_str(), &new_service).await?;
     patch_status(
         name.as_str(),
         &exposed_apps,
