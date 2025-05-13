@@ -59,17 +59,6 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
                 .await?;
         }
     }
-    /*
-    patch_status(
-        name.as_str(),
-        &exposed_apps,
-        ExposedAppStatus {
-            deployment_name: Some(deployment_name.clone()),
-            ..ExposedAppStatus::default()
-        },
-    )
-    .await?;
-     */
     let new_service = service(
         service_name.as_str(),
         namespace.as_str(),
@@ -92,17 +81,15 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
                 .await?;
         }
     }
-    /*
     patch_status(
         name.as_str(),
         &exposed_apps,
         ExposedAppStatus {
             service_name: Some(service_name.clone()),
-            ..ExposedAppStatus::default()
+            deployment_name: Some(deployment_name.clone()),
         },
     )
     .await?;
-     */
     Ok(Action::await_change())
 }
 
