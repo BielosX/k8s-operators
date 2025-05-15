@@ -6,6 +6,7 @@ use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Service;
 use kube::runtime::Controller;
+use kube::runtime::events::{Recorder, Reporter};
 use kube::runtime::watcher::Config;
 use kube::{Api, Client, Result};
 use std::env;
@@ -24,7 +25,6 @@ async fn main() -> Result<()> {
     let exposed_apps: Api<ExposedApp> = Api::all(client.clone());
     let deployments: Api<Deployment> = Api::all(client.clone());
     let services: Api<Service> = Api::all(client.clone());
-    let data = Arc::new(Data::new(client));
 
     let port = env::var("PORT").unwrap_or(String::from("8080"));
     let app = Router::new().route("/healthz", get(|| async { "OK" }));
@@ -32,6 +32,12 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
     let serve = axum::serve(listener, app);
+    let reporter = Reporter {
+        controller: String::from("exposed-app-controller"),
+        instance: None,
+    };
+    let recorder = Recorder::new(client.clone(), reporter);
+    let data = Arc::new(Data::new(client.clone(), recorder));
     let controller = Controller::new(exposed_apps, Config::default())
         .owns(deployments, Config::default())
         .owns(services, Config::default())

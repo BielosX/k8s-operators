@@ -8,6 +8,7 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int;
 use kube::api::Patch::Merge;
 use kube::api::{PatchParams, PostParams};
 use kube::runtime::controller::Action;
+use kube::runtime::events::{Event, EventType, Recorder};
 use kube::{Api, Client, Error, Resource};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -21,11 +22,12 @@ use tracing::info;
 #[derive(Clone)]
 pub struct Data {
     client: Client,
+    recorder: Recorder,
 }
 
 impl Data {
-    pub fn new(client: Client) -> Self {
-        Self { client }
+    pub fn new(client: Client, recorder: Recorder) -> Self {
+        Self { client, recorder }
     }
 }
 
@@ -43,6 +45,15 @@ async fn save<T: Clone + DeserializeOwned + Debug + Serialize>(
     }
 }
 
+async fn publish_event(
+    recorder: &Recorder,
+    exposed_app: &ExposedApp,
+    event: Event,
+) -> Result<(), Error> {
+    let reference = exposed_app.object_ref(&());
+    recorder.publish(&event, &reference).await
+}
+
 pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Error> {
     let namespace = object.metadata.namespace.clone().unwrap();
     let name = object.metadata.name.clone().unwrap();
@@ -50,6 +61,7 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
     let services: Api<Service> = Api::namespaced(ctx.client.clone(), namespace.as_str());
     let deployments: Api<Deployment> = Api::namespaced(ctx.client.clone(), namespace.as_str());
     let exposed_apps: Api<ExposedApp> = Api::namespaced(ctx.client.clone(), namespace.as_str());
+    let recorder = ctx.recorder.clone();
     let mut pod_labels: BTreeMap<String, String> = BTreeMap::new();
     pod_labels.insert(String::from("app.kubernetes.io/name"), name.clone());
     let deployment_name = format!("{}-deployment", name);
@@ -61,6 +73,18 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
         &object,
     );
     save(&deployments, deployment_name.as_str(), &new_deployment).await?;
+    publish_event(
+        &recorder,
+        &object,
+        Event {
+            type_: EventType::Normal,
+            reason: String::from("Deployment provisioning requested"),
+            action: String::from("DeploymentProvisioned"),
+            note: Some(format!("Deployment {} provisioned", deployment_name)),
+            secondary: None,
+        },
+    )
+    .await?;
     let new_service = service(
         service_name.as_str(),
         namespace.as_str(),
@@ -68,6 +92,18 @@ pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action
         &object,
     );
     save(&services, service_name.as_str(), &new_service).await?;
+    publish_event(
+        &recorder,
+        &object,
+        Event {
+            type_: EventType::Normal,
+            reason: String::from("Service provisioning requested"),
+            action: String::from("ServiceProvisioned"),
+            note: Some(format!("Service {} provisioned", service_name)),
+            secondary: None,
+        },
+    )
+    .await?;
     patch_status(
         name.as_str(),
         &exposed_apps,
