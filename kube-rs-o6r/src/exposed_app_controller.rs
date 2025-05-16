@@ -1,4 +1,5 @@
 use crate::exposed_app::{ExposedApp, ExposedAppStatus};
+use futures::StreamExt;
 use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
@@ -7,8 +8,10 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int;
 use kube::api::Patch::Merge;
 use kube::api::{PatchParams, PostParams};
+use kube::runtime::Controller;
 use kube::runtime::controller::Action;
-use kube::runtime::events::{Event, EventType, Recorder};
+use kube::runtime::events::{Event, EventType, Recorder, Reporter};
+use kube::runtime::watcher::Config;
 use kube::{Api, Client, Error, Resource};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -17,7 +20,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 pub struct Data {
@@ -206,4 +209,27 @@ fn service(
 
 pub fn error_policy(_object: Arc<ExposedApp>, _err: &Error, _ctx: Arc<Data>) -> Action {
     Action::requeue(Duration::from_secs(5))
+}
+
+pub async fn run_controller(client: Client) -> () {
+    let reporter = Reporter {
+        controller: String::from("exposed-app-controller"),
+        instance: None,
+    };
+    let recorder = Recorder::new(client.clone(), reporter);
+    let data = Arc::new(Data::new(client.clone(), recorder));
+    let exposed_apps: Api<ExposedApp> = Api::all(client.clone());
+    let deployments: Api<Deployment> = Api::all(client.clone());
+    let services: Api<Service> = Api::all(client.clone());
+    Controller::new(exposed_apps, Config::default())
+        .owns(deployments, Config::default())
+        .owns(services, Config::default())
+        .run(reconcile, error_policy, Arc::clone(&data))
+        .for_each(|res| async {
+            match res {
+                Ok(o) => info!("reconciled {:?}", o),
+                Err(e) => warn!("reconcile failed: {:?}", e),
+            }
+        })
+        .await;
 }
