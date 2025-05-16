@@ -32,6 +32,9 @@ pub struct ExposedAppSpec {
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExposedAppStatus {
+    // When Merge Patch is used, don't remove the field when None used
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deployment_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_name: Option<String>,
 }
