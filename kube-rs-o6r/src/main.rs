@@ -1,10 +1,10 @@
-use axum::routing::get;
+use crate::exposed_app_controller::run_controller;
 use axum::Router;
+use axum::routing::get;
 use kube::{Client, Result};
 use std::env;
 use tokio::select;
 use tracing::{error, info};
-use crate::exposed_app_controller::run_controller;
 
 mod exposed_app;
 mod exposed_app_controller;

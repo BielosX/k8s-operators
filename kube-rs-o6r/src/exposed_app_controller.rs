@@ -23,7 +23,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 #[derive(Clone)]
-pub struct Data {
+struct Data {
     client: Client,
     recorder: Recorder,
 }
@@ -57,7 +57,7 @@ async fn publish_event(
     recorder.publish(&event, &reference).await
 }
 
-pub async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Error> {
+async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Error> {
     let namespace = object.metadata.namespace.clone().unwrap();
     let name = object.metadata.name.clone().unwrap();
     info!("Reconciling {} {}", name, namespace,);
@@ -207,7 +207,7 @@ fn service(
     }
 }
 
-pub fn error_policy(_object: Arc<ExposedApp>, _err: &Error, _ctx: Arc<Data>) -> Action {
+fn error_policy(_object: Arc<ExposedApp>, _err: &Error, _ctx: Arc<Data>) -> Action {
     Action::requeue(Duration::from_secs(5))
 }
 
