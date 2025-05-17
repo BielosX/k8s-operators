@@ -4,8 +4,9 @@ use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
 };
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{Condition, LabelSelector, ObjectMeta, Time};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int;
+use k8s_openapi::chrono::{DateTime, Utc};
 use kube::api::Patch::Merge;
 use kube::api::{PatchParams, PostParams};
 use kube::runtime::Controller;
@@ -60,6 +61,13 @@ async fn publish_event(
 async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Error> {
     let namespace = object.metadata.namespace.clone().unwrap();
     let name = object.metadata.name.clone().unwrap();
+    let generation = object.metadata.generation.unwrap();
+    let mut conditions = object
+        .status
+        .clone()
+        .unwrap_or(ExposedAppStatus::default())
+        .conditions
+        .unwrap_or(Vec::new());
     info!("Reconciling {} {}", name, namespace,);
     let services: Api<Service> = Api::namespaced(ctx.client.clone(), namespace.as_str());
     let deployments: Api<Deployment> = Api::namespaced(ctx.client.clone(), namespace.as_str());
@@ -96,7 +104,19 @@ async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Er
             ..Default::default()
         },
     )
-        .await?;
+    .await?;
+    conditions = set_condition(
+        &conditions,
+        Condition {
+            last_transition_time: Time(DateTime::from(Utc::now())),
+            message: "Deployment ready".into(),
+            observed_generation: Some(generation),
+            reason: "Provisioned".into(),
+            status: "True".into(),
+            type_: "DeploymentReady".into(),
+        },
+    );
+    patch_conditions(name.as_str(), &exposed_apps, &conditions).await?;
     let new_service = service(
         service_name.as_str(),
         namespace.as_str(),
@@ -125,6 +145,18 @@ async fn reconcile(object: Arc<ExposedApp>, ctx: Arc<Data>) -> Result<Action, Er
         },
     )
     .await?;
+    conditions = set_condition(
+        &conditions,
+        Condition {
+            last_transition_time: Time(DateTime::from(Utc::now())),
+            message: "Service ready".into(),
+            observed_generation: Some(generation),
+            reason: "Provisioned".into(),
+            status: "True".into(),
+            type_: "ServiceReady".into(),
+        },
+    );
+    patch_conditions(name.as_str(), &exposed_apps, &conditions).await?;
     Ok(Action::await_change())
 }
 
@@ -138,6 +170,33 @@ async fn patch_status(
     });
     api.patch_status(name, &PatchParams::default(), &Merge(&status))
         .await
+}
+
+async fn patch_conditions(
+    name: &str,
+    api: &Api<ExposedApp>,
+    conditions: &Vec<Condition>,
+) -> Result<ExposedApp, Error> {
+    let status = json!({
+        "status": ExposedAppStatus {
+            conditions: Some(conditions.clone()),
+            ..Default::default()
+        },
+    });
+    api.patch_status(name, &PatchParams::default(), &Merge(&status))
+        .await
+}
+
+fn set_condition(conditions: &Vec<Condition>, condition: Condition) -> Vec<Condition> {
+    let mut new_conditions = conditions.clone();
+    for c in new_conditions.iter_mut() {
+        if c.type_ == condition.type_ {
+            *c = condition;
+            return new_conditions;
+        }
+    }
+    new_conditions.push(condition);
+    new_conditions
 }
 
 fn deployment(

@@ -1,3 +1,4 @@
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use k8s_openapi::serde::{Deserialize, Serialize};
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -37,4 +38,6 @@ pub struct ExposedAppStatus {
     pub deployment_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<Condition>>,
 }
